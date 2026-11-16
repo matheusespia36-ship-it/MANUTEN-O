@@ -1,156 +1,1283 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Controle de Manutenção - Frota</title>
+  <title>Painel de Manutenção & OS (QHA) • Fagundes Construção e Mineração</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+          colors: {
+            fg: {
+              base: '#090c12', surface: '#10151e', elevated: '#161d29', border: '#232d3d',
+              blue: '#00379e', blueHover: '#0047cc', gray: '#98989a', green: '#95d324'
+            }
+          }
+        }
+      }
+    };
+  </script>
   <style>
-    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 16px; }
-    .container { max-width: 1100px; margin: auto; }
-    h1 { font-size: 1.3rem; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .card { background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155; }
-    label { display: block; font-size: 0.85rem; margin-top: 10px; color: #94a3b8; }
-    input, select { width: 100%; padding: 10px; margin-top: 4px; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; }
-    button { margin-top: 15px; width: 100%; padding: 12px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.95rem; }
-    .btn-entrada { background: #dc2626; color: white; }
-    .btn-retirada { background: #16a34a; color: white; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { text-align: left; padding: 10px; border-bottom: 1px solid #334155; font-size: 0.85rem; }
-    th { color: #94a3b8; }
-    .badge { background: #dc2626; padding: 3px 8px; border-radius: 12px; font-size: 0.8rem; }
+    :root {
+      --fg-bg-base: #090c12; --fg-bg-surface: #10151e; --fg-bg-elevated: #161d29;
+      --fg-border: #232d3d; --fg-blue: #00379e; --fg-gray: #98989a; --fg-green: #95d324;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--fg-bg-base);
+      background-image: linear-gradient(rgba(152, 152, 154, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(152, 152, 154, 0.03) 1px, transparent 1px);
+      background-size: 32px 32px; color: #f3f4f6; margin: 0; overflow-x: hidden;
+    }
+    .font-mono-tech { font-family: 'JetBrains Mono', monospace; }
+    .corp-card { background-color: var(--fg-bg-surface); border: 1px solid var(--fg-border); box-shadow: 0 10px 25px -10px rgba(0, 0, 0, 0.7); }
+    .tabela-qha-industrial { width: 100%; border-collapse: collapse; font-size: 12.5px; background-color: #f4f5f7; color: #111827; }
+    .tabela-qha-industrial thead th { background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%); color: #111827; font-weight: 700; text-align: left; padding: 8px 11px; border-right: 1px solid #9ca3af; border-bottom: 1px solid #6b7280; white-space: nowrap; font-size: 12px; }
+    .tabela-qha-industrial tbody tr { background-color: #ffffff; border-bottom: 1px solid #d1d5db; cursor: pointer; transition: background-color 0.12s ease; }
+    .tabela-qha-industrial tbody tr:nth-child(even) { background-color: #eef1f5; }
+    .tabela-qha-industrial tbody tr:hover { background-color: #dce4ee; }
+    .tabela-qha-industrial tbody tr.linha-selecionada { background-color: #47657d !important; color: #ffffff !important; }
+    .tabela-qha-industrial tbody td { padding: 6px 10px; border-right: 1px solid #d1d5db; vertical-align: middle; white-space: nowrap; }
+    .celula-vermelha-qha { background-color: #e60000 !important; color: #ffffff !important; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
+    .linha-selecionada .celula-vermelha-qha { background-color: #47657d !important; color: #ffffff !important; }
+    @keyframes pulso-corporativo {
+      0%, 100% { border-color: #95d324; box-shadow: 0 0 0 0 rgba(149, 211, 36, 0.25); }
+      50% { border-color: #b5ef48; box-shadow: 0 0 20px 3px rgba(149, 211, 36, 0.2); }
+    }
+    .banner-liberacao-corp { background-color: #111a12; border: 1px solid #95d324; border-left-width: 5px; animation: pulso-corporativo 2s infinite ease-in-out; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #090c12; }
+    ::-webkit-scrollbar-thumb { background: #232d3d; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #00379e; }
   </style>
 </head>
-<body>
-  <div class="container">
-    <h1>Gestão de Manutenção — Ativos: <span id="total-manutencao" class="badge">0</span></h1>
+<body class="min-h-screen flex flex-col selection:bg-[#00379e] selection:text-white">
 
-    <div class="grid">
-      <div class="card">
-        <h3>Registrar Entrada em Manutenção</h3>
-        <label>ID OS</label><input id="ent-os" placeholder="Ex: OS-2026-010" />
-        <label>Equipamento (Tag)</label><input id="ent-equip" placeholder="Ex: PF-01" />
-        <label>Frota</label><input id="ent-frota" placeholder="Ex: Perfuratriz" />
-        <label>Motivo / Falha</label><input id="ent-motivo" placeholder="Ex: Vazamento hidráulico" />
-        <label>Prioridade</label>
-        <select id="ent-prio"><option>Alta</option><option>Média</option><option>Baixa</option></select>
-        <label>Usuário</label><input id="ent-user" placeholder="Nome do controlador" />
-        <label>Foto da Falha / Equipamento</label>
-        <input type="file" id="ent-foto" accept="image/*" capture="environment" />
-        <button class="btn-entrada" id="btn-ent" onclick="enviarEntrada()">Salvar Log de Entrada</button>
+  <!-- 1. TELA DE LOGIN CORPORATIVA -->
+  <div id="tela-login" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-lg corp-card rounded-2xl overflow-hidden border-t-4 border-t-[#00379e]">
+      <div class="bg-[#131924] px-7 py-6 border-b border-[#232d3d]">
+        <div class="flex items-center justify-between gap-4 mb-4 pb-4 border-b border-[#232d3d]/80">
+          <svg class="h-10 w-auto" viewBox="0 0 265 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="4" width="48" height="48" rx="8" fill="#00379e"/>
+            <path d="M13 15H36V21.5H20.5V25.5H33V31.5H20.5V41H13V15Z" fill="#ffffff"/>
+            <polygon points="31,34 39,34 35,41 27,41" fill="#95d324"/>
+            <text x="60" y="30" fill="#ffffff" font-family="Inter, sans-serif" font-weight="800" font-size="22" letter-spacing="1.5">FAGUNDES</text>
+            <text x="61" y="44" fill="#98989a" font-family="Inter, sans-serif" font-weight="600" font-size="9.5" letter-spacing="1.8">CONSTRUÇÃO E MINERAÇÃO</text>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-extrabold tracking-tight text-white">PAINEL DE MANUTENÇÃO &amp; OS <span class="text-[#95d324]">(QHA)</span></h1>
+          <p class="text-xs text-[#98989a] mt-1 flex items-center gap-1.5">
+            <span>Sincronização automática (10 min):</span>
+            <code class="bg-[#090c12] text-[#95d324] border border-[#232d3d] px-2 py-0.5 rounded font-mono-tech text-[11px]">manuntecao.xlsm + Drive API</code>
+          </p>
+        </div>
       </div>
 
-      <div class="card">
-        <h3>Registrar Retirada / Liberação</h3>
-        <label>ID OS</label><input id="ret-os" placeholder="Ex: OS-2026-010" />
-        <label>Equipamento (Tag)</label><input id="ret-equip" placeholder="Ex: PF-01" />
-        <label>Frota</label><input id="ret-frota" placeholder="Ex: Perfuratriz" />
-        <label>Serviço Executado</label><input id="ret-serv" placeholder="Ex: Troca de mangueira" />
-        <label>Mecânico Responsável</label><input id="ret-mec" placeholder="Nome do mecânico" />
-        <label>Liberado Por</label><input id="ret-user" placeholder="Nome do encarregado" />
-        <label>Foto da Liberação</label>
-        <input type="file" id="ret-foto" accept="image/*" capture="environment" />
-        <button class="btn-retirada" id="btn-ret" onclick="enviarRetirada()">Salvar Log de Retirada</button>
-      </div>
-    </div>
+      <form id="form-login" class="p-7 space-y-4">
+        <div id="erro-login" class="hidden bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs font-medium px-3.5 py-2.5 rounded-lg flex items-center gap-2">
+          <span class="font-bold text-rose-400">!</span>
+          <span>Usuário ou senha inválidos.</span>
+        </div>
 
-    <div class="card">
-      <h3>Equipamentos em Manutenção</h3>
-      <table>
-        <thead>
-          <tr><th>Equipamento</th><th>Início</th><th>Motivo</th><th>Mecânico</th></tr>
-        </thead>
-        <tbody id="tabela-manutencao">
-          <tr><td colspan="4">Carregando...</td></tr>
-        </tbody>
-      </table>
+        <div>
+          <label for="input-usuario" class="block text-[11px] font-bold uppercase tracking-wider text-[#98989a] mb-1.5">Usuário Corporativo</label>
+          <input type="text" id="input-usuario" autocomplete="username" placeholder="encarregado, clecio, controlador ou admin" class="w-full bg-[#090c12] border border-[#232d3d] focus:border-[#00379e] focus:outline-none rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-neutral-600 transition" required />
+        </div>
+
+        <div>
+          <label for="input-senha" class="block text-[11px] font-bold uppercase tracking-wider text-[#98989a] mb-1.5">Senha de Acesso</label>
+          <input type="password" id="input-senha" autocomplete="current-password" placeholder="Senha padrão: 123" class="w-full bg-[#090c12] border border-[#232d3d] focus:border-[#00379e] focus:outline-none rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-neutral-600 transition" required />
+        </div>
+
+        <button type="submit" class="w-full bg-[#00379e] hover:bg-[#0047cc] active:scale-[0.99] text-white font-bold py-3 rounded-lg text-xs uppercase tracking-widest transition cursor-pointer shadow-md">
+          Acessar Sistema
+        </button>
+
+        <div class="pt-4 border-t border-[#232d3d]">
+          <p class="text-[10px] font-bold uppercase tracking-widest text-[#98989a] text-center mb-3">Acesso Rápido por Perfil Operacional (Senha: 123)</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button type="button" data-quick-user="encarregado" class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#00379e] p-2.5 rounded-xl text-left transition cursor-pointer">
+              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-[#60a5fa] shrink-0">ENC</span>
+              <div class="min-w-0"><div class="text-xs font-bold text-white truncate">Encarregado</div><div class="text-[10px] text-[#98989a] truncate">QHA + Abertura OS</div></div>
+            </button>
+            <button type="button" data-quick-user="clecio" class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#95d324] p-2.5 rounded-xl text-left transition cursor-pointer">
+              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-[#95d324] shrink-0">MEC</span>
+              <div class="min-w-0"><div class="text-xs font-bold text-white truncate">Clecio (Mat. 1328)</div><div class="text-[10px] text-[#98989a] truncate">QHA + Lista Minhas OS</div></div>
+            </button>
+            <button type="button" data-quick-user="controlador" class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#00379e] p-2.5 rounded-xl text-left transition cursor-pointer">
+              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">CCO</span>
+              <div class="min-w-0"><div class="text-xs font-bold text-white truncate">Controlador (CCO)</div><div class="text-[10px] text-[#98989a] truncate">Fila Pendências xlsm</div></div>
+            </button>
+            <button type="button" data-quick-user="admin" class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#95d324] p-2.5 rounded-xl text-left transition cursor-pointer">
+              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-purple-400 shrink-0">ADM</span>
+              <div class="min-w-0"><div class="text-xs font-bold text-white truncate">Administrador</div><div class="text-[10px] text-[#98989a] truncate">Acesso Total + Acessos</div></div>
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   </div>
 
+  <!-- 2. SISTEMA PRINCIPAL CORPORATIVO -->
+  <div id="tela-sistema" class="hidden flex-1 flex flex-col">
+    <header class="bg-[#10151e] border-b border-[#232d3d] sticky top-0 z-30">
+      <div class="h-1 w-full bg-[#00379e]"></div>
+      <div class="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3.5">
+          <svg class="h-9 w-auto shrink-0" viewBox="0 0 185 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="2" width="44" height="44" rx="7" fill="#00379e"/>
+            <path d="M12 12H33V18H19V22H30.5V27.5H19V36H12V12Z" fill="#ffffff"/>
+            <polygon points="28.5,29.5 35.5,29.5 32,36 25,36" fill="#95d324"/>
+            <text x="54" y="25" fill="#ffffff" font-family="Inter, sans-serif" font-weight="800" font-size="18" letter-spacing="1.2">FAGUNDES</text>
+            <text x="55" y="37" fill="#98989a" font-family="Inter, sans-serif" font-weight="600" font-size="7.5" letter-spacing="1.3">CONSTRUÇÃO E MINERAÇÃO</text>
+          </svg>
+          <div class="hidden sm:block h-8 w-px bg-[#232d3d]"></div>
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 class="text-sm sm:text-base font-extrabold tracking-tight text-white">PAINEL DE MANUTENÇÃO &amp; OS <span class="text-[#95d324]">(QHA)</span></h1>
+              <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-[#090c12] text-neutral-300 border border-[#232d3d] px-2.5 py-0.5 rounded">
+                <span class="w-1.5 h-1.5 rounded-full bg-[#95d324] animate-pulse"></span>
+                manuntecao.xlsm • Varredura 10m (<span id="header-timer-10m" class="font-mono-tech text-[#95d324]">10:00</span>)
+              </span>
+            </div>
+            <p class="text-[11px] text-[#98989a] mt-0.5">Controle de Manutenção, Ordens de Serviço e Logs no Google Drive</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" id="btn-testar-sirene" class="flex items-center gap-1.5 bg-[#161d29] hover:bg-[#1f293a] border border-[#232d3d] text-neutral-200 font-semibold text-xs px-3 py-2 rounded-lg transition cursor-pointer">
+            <span class="text-[#95d324]">🚨</span><span class="hidden md:inline">Testar Sirene LFO</span>
+          </button>
+          <div class="flex items-center gap-2 bg-[#090c12] border border-[#232d3d] px-3 py-1.5 rounded-lg">
+            <div id="header-avatar-sigla" class="w-7 h-7 rounded bg-[#00379e] flex items-center justify-center text-xs font-bold text-white">OP</div>
+            <div>
+              <div id="header-nome-usuario" class="text-xs font-bold text-white leading-tight">Usuário</div>
+              <div id="header-badge-perfil" class="text-[10px] font-mono-tech uppercase text-[#95d324] leading-tight">PERFIL</div>
+            </div>
+          </div>
+          <button type="button" id="btn-sair-login" class="bg-[#161d29] hover:bg-[#00379e] border border-[#232d3d] hover:border-[#00379e] text-neutral-200 hover:text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition cursor-pointer">
+            Trocar Perfil
+          </button>
+        </div>
+      </div>
+      <nav id="barra-abas" class="max-w-[1600px] mx-auto px-4 flex flex-wrap items-center gap-1.5 border-t border-[#1b2330] py-2"></nav>
+    </header>
+
+    <div id="banner-alerta-saida" class="hidden max-w-[1600px] w-full mx-auto px-4 pt-4">
+      <div class="banner-liberacao-corp text-white rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-lg bg-[#95d324]/15 border border-[#95d324]/50 text-[#95d324] flex items-center justify-center font-bold text-base shrink-0">✓</div>
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-[#95d324]">Baixa Sincronizada • Coluna "Fim" Preenchida em manuntecao.xlsm</div>
+            <div id="banner-alerta-titulo" class="text-base font-bold text-white mt-0.5">EQUIPAMENTO LIBERADO DO QHA E EXCLUÍDO DA FILA</div>
+            <div id="banner-alerta-detalhe" class="text-xs text-neutral-300 mt-0.5"></div>
+          </div>
+        </div>
+        <button type="button" id="btn-fechar-banner" class="bg-[#161d29] hover:bg-[#1f293a] text-neutral-200 text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-lg border border-[#232d3d] transition cursor-pointer shrink-0">Ciente • Fechar</button>
+      </div>
+    </div>
+
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 space-y-5">
+      <!-- ABA 1: QUADRO DE MANUTENÇÕES (QHA) -->
+      <section id="aba-quadro" class="hidden space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="corp-card rounded-xl p-4 border-l-4 border-l-[#00379e] flex items-center justify-between">
+            <div>
+              <span class="text-[11px] font-bold uppercase tracking-wider text-[#98989a]">Equipamentos em Manutenção (Sem Horário Fim)</span>
+              <div class="mt-1.5 flex items-baseline gap-3">
+                <span id="kpi-total-manutencao" class="text-3xl font-extrabold text-white font-mono-tech">0</span>
+                <span class="text-xs text-[#98989a]">unidades ativas no QHA</span>
+              </div>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-[#00379e]/20 border border-[#00379e]/50 flex items-center justify-center text-xl">🚜</div>
+          </div>
+
+          <div class="corp-card rounded-xl p-4 border-l-4 border-l-[#95d324] flex items-center justify-between">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-[#95d324] animate-pulse"></span>
+                <span id="kpi-status-conexao" class="text-[11px] font-bold uppercase tracking-wider text-[#95d324]">Integração Google Drive • Conectado</span>
+              </div>
+              <div class="mt-1.5 flex items-baseline gap-2">
+                <span class="text-base font-bold text-white font-mono-tech">manuntecao.xlsm</span>
+                <span class="text-xs text-[#98989a]">• Última atualização: <strong id="kpi-ultima-atualizacao" class="text-white font-mono-tech">--:--:--</strong></span>
+              </div>
+            </div>
+            <button type="button" id="btn-sincronizar-planilha-real" class="px-3 py-2 rounded-lg bg-[#161d29] hover:bg-[#00379e] border border-[#232d3d] text-xs font-bold text-white cursor-pointer transition">
+              ↻ Sincronizar Planilha
+            </button>
+          </div>
+        </div>
+
+        <div class="corp-card rounded-xl p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div id="qha-category-pills" class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+            <button type="button" data-qha-cat="TODAS" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-[#00379e] text-white transition whitespace-nowrap cursor-pointer">Todas as Categorias</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO MINA" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Mina</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO DRYSTACK" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Drystack</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO ALIMENTACAO" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Alimentação</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO INFRA" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Infraestrutura</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO AUXILIAR" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Auxiliar</button>
+          </div>
+
+          <div class="relative flex-1 sm:w-72">
+            <input type="text" id="qha-busca-texto" placeholder="Buscar frota, estado ou comentário..." class="w-full bg-[#090c12] border border-[#232d3d] focus:border-[#00379e] focus:outline-none rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-neutral-500" />
+            <span class="absolute left-2.5 top-2 text-xs text-[#98989a]">🔍</span>
+          </div>
+        </div>
+
+        <div class="corp-card rounded-xl overflow-hidden">
+          <div class="bg-[#161d29] px-4 py-2.5 border-b border-[#232d3d] flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-extrabold uppercase tracking-wider text-white">Quadro de Manutenções Ativas (QHA)</span>
+              <span id="qha-contador-filtrado" class="px-2 py-0.5 rounded bg-[#090c12] border border-[#232d3d] font-mono-tech text-[11px] text-[#95d324]">0 itens</span>
+            </div>
+            <span class="text-[11px] text-[#98989a]">Clique em qualquer linha para abrir o <strong class="text-white">Histórico Técnico</strong></span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="tabela-qha-industrial">
+              <thead>
+                <tr><th>Nome ▲</th><th>Status</th><th>Estado</th><th>Duração (minutos)</th><th>Duração (horas)</th><th>Comentário</th></tr>
+              </thead>
+              <tbody id="tbody-qha-industrial"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA 2: ORDENS DE SERVIÇO (ENCARREGADO / ADMIN) -->
+      <section id="aba-os" class="hidden space-y-5">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <div class="lg:col-span-5 corp-card rounded-2xl p-5 space-y-4">
+            <div class="border-b border-[#232d3d] pb-3">
+              <span class="text-[10px] font-bold uppercase tracking-widest text-[#95d324]">Abertura de Solicitação • Grava Log de Entrada no Drive</span>
+              <h2 class="text-base font-extrabold text-white mt-0.5">Abrir Nova Ordem de Serviço (OS)</h2>
+              <p class="text-xs text-[#98989a] mt-0.5">Envia ao mecânico, salva foto + registro na aba <strong>Entrada</strong> e atualiza <code>log_entrada_equipamentos.xlsx</code>.</p>
+            </div>
+
+            <form id="form-nova-os" class="space-y-3.5">
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Frota / Equipamento *</label>
+                  <select id="os-frota" required class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs font-mono-tech text-white focus:border-[#00379e] focus:outline-none"></select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Tipo de Manutenção *</label>
+                  <select id="os-tipo" required class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+                    <option value="Corretiva">Corretiva</option>
+                    <option value="Preventiva">Preventiva</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Especialidade *</label>
+                  <select id="os-especialidade" required class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+                    <option value="MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA">205 • Corretiva Mecânica</option>
+                    <option value="MANUTENCAO 206 MANUTENCAO CORRETIVA ELETRICA">206 • Corretiva Elétrica</option>
+                    <option value="MANUTENCAO 207 MANUTENCAO PREVENTIVA">207 • Preventiva</option>
+                    <option value="MANUTENCAO 204 MANUTENCAO BORRACHARIA">204 • Borracharia</option>
+                    <option value="MANUTENCAO 210 MANUTENCAO SISTEMA DE BASCULA">210 • Sistema de Báscula</option>
+                    <option value="MANUTENCAO 214 MANUTENCAO AR CONDICIONADO">214 • Ar Condicionado</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Mecânico Destinado *</label>
+                  <select id="os-mecanico" required class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+                    <option value="Clecio Ribeiro dos Santos (Mat. 1328)">Clecio Ribeiro (Mat. 1328)</option>
+                    <option value="Marcos Vinícius (Mat. 1104)">Marcos Vinícius (Mat. 1104)</option>
+                    <option value="Rodrigo Alves (Mat. 1492)">Rodrigo Alves (Mat. 1492)</option>
+                    <option value="Anderson Lima (Mat. 1219)">Anderson Lima (Mat. 1219)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Comentário / Sintoma da Falha *</label>
+                <textarea id="os-descricao" rows="2" required placeholder="Ex: Vazamento hidráulico no comando principal..." class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:border-[#00379e] focus:outline-none"></textarea>
+              </div>
+
+              <div class="bg-[#161d29] border border-dashed border-[#232d3d] rounded-xl p-3 space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-[11px] font-bold text-white">📷 Foto da Falha (Salva em Fotos_Manutencao)</span>
+                  <div class="flex items-center gap-1.5">
+                    <button type="button" id="btn-foto-simulada" class="px-2.5 py-1 rounded bg-[#090c12] hover:bg-[#1f293a] border border-[#232d3d] text-[11px] font-semibold text-[#95d324] cursor-pointer">Gerar Foto Teste</button>
+                    <label class="px-2.5 py-1 rounded bg-[#00379e] hover:bg-[#0047cc] text-[11px] font-semibold text-white cursor-pointer">
+                      Câmera / Arquivo
+                      <input type="file" id="os-foto-input" accept="image/*" capture="environment" class="hidden" />
+                    </label>
+                  </div>
+                </div>
+                <div id="os-foto-preview-wrap" class="hidden flex items-center gap-2.5 bg-[#090c12] p-2 rounded-lg border border-[#232d3d]">
+                  <img id="os-foto-preview-img" src="" alt="Prévia" class="w-12 h-12 object-cover rounded border border-[#232d3d]" />
+                  <div class="flex-1 min-w-0">
+                    <div id="os-foto-nome" class="text-[11px] font-semibold text-white truncate">evidencia_campo.png</div>
+                    <div class="text-[10px] text-[#95d324]">Pronta para envio ao Google Drive</div>
+                  </div>
+                  <button type="button" id="btn-remover-foto" class="text-[11px] text-rose-400 hover:text-rose-300 font-bold px-1.5 cursor-pointer">✕</button>
+                </div>
+              </div>
+
+              <button type="submit" id="btn-submit-nova-os" class="w-full bg-[#00379e] hover:bg-[#0047cc] text-white font-bold py-2.5 rounded-lg text-xs uppercase tracking-wider transition cursor-pointer shadow">
+                Emitir OS &amp; Gravar Log de Entrada no Drive
+              </button>
+            </form>
+          </div>
+
+          <div class="lg:col-span-7 corp-card rounded-2xl p-5 flex flex-col">
+            <div class="flex items-center justify-between border-b border-[#232d3d] pb-3 mb-3">
+              <div>
+                <h3 class="text-sm font-extrabold uppercase tracking-wider text-white">Ordens de Serviço Emitidas</h3>
+                <p class="text-xs text-[#98989a]">Acompanhamento de execução e histórico técnico por equipamento</p>
+              </div>
+              <span id="contador-os-geral" class="px-2.5 py-1 rounded bg-[#090c12] border border-[#232d3d] font-mono-tech text-xs text-[#95d324]">0 OS</span>
+            </div>
+            <div id="lista-os-encarregado" class="space-y-2.5 overflow-y-auto max-h-[540px] pr-1"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA 3: MINHAS OS (DESTINADAS) -->
+      <section id="aba-minhas-os" class="hidden space-y-4">
+        <div class="corp-card rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#95d324]"></span>
+              <h2 class="text-base sm:text-lg font-extrabold text-white">Minhas OS (Destinadas) • Lista de Atendimento</h2>
+            </div>
+            <p class="text-xs text-[#98989a] mt-0.5">Ao finalizar, o sistema grava o log de <strong>Retirada</strong> + foto no Google Drive e notifica o CCO.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="badge-mecanico-ativo" class="px-3 py-1.5 rounded-lg bg-[#161d29] border border-[#232d3d] text-xs font-mono-tech text-neutral-200">Clecio (Mat. 1328)</span>
+            <span id="contador-minhas-os" class="px-3 py-1.5 rounded-lg bg-[#00379e] text-white text-xs font-mono-tech font-bold">0 Ativas</span>
+          </div>
+        </div>
+
+        <div class="corp-card rounded-2xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-[#161d29] border-b border-[#232d3d] text-[11px] font-mono-tech uppercase text-[#98989a]">
+                  <th class="py-3 px-3.5">OS (#)</th><th class="py-3 px-3.5">Frota</th><th class="py-3 px-3.5">Tipo</th>
+                  <th class="py-3 px-3.5">Especialidade</th><th class="py-3 px-3.5">Descrição / Comentário</th>
+                  <th class="py-3 px-3.5">Status</th><th class="py-3 px-3.5 text-right">Histórico / Foto / Ação</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-lista-mecanico" class="divide-y divide-[#232d3d] text-xs bg-[#10151e]"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA 4: FILA DE PENDÊNCIAS AUTOMÁTICA (CONTROLADOR CCO) -->
+      <section id="aba-pendencias" class="hidden space-y-5">
+        <div class="corp-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-[#00379e] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="px-2.5 py-0.5 rounded bg-[#00379e] text-white font-mono-tech text-[11px] font-bold">manuntecao.xlsm</span>
+              <span class="text-xs font-bold uppercase tracking-wider text-[#95d324]">Sincronização Automática a cada 10 minutos</span>
+            </div>
+            <h2 class="text-base sm:text-lg font-extrabold text-white">Fila de Pendências CCO (Exclusão Automática via Colunas Início &amp; Fim)</h2>
+            <p class="text-xs text-[#98989a]">
+              • <strong>Pendência de Entrada:</strong> Excluída automaticamente quando a frota aparece com <code class="text-white">Início</code> preenchido.<br/>
+              • <strong>Pendência de Baixa/Saída:</strong> Só libera do QHA e exclui da fila quando a linha da frota tiver o horário <code class="text-[#95d324]">Fim</code> preenchido.
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+            <div class="bg-[#090c12] border border-[#232d3d] rounded-xl px-3.5 py-2 text-right">
+              <div class="text-[10px] uppercase tracking-wider text-[#98989a]">Próxima Varredura (10m)</div>
+              <div id="cco-countdown-display" class="text-base font-extrabold font-mono-tech text-[#95d324]">10:00</div>
+            </div>
+            <button type="button" id="btn-varredura-agora" class="px-4 py-3 rounded-xl bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] font-extrabold text-xs uppercase tracking-wider transition cursor-pointer shadow">
+              🔄 Executar Varredura 10 min Agora
+            </button>
+          </div>
+        </div>
+
+        <div class="corp-card rounded-2xl overflow-hidden">
+          <div class="bg-[#161d29] px-4 py-3 border-b border-[#232d3d] flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h3 class="text-xs font-extrabold uppercase tracking-wider text-white">Solicitações Aguardando Apontamento na Planilha</h3>
+              <span id="cco-pendencias-badge" class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono-tech text-[11px] font-bold">0 pendentes</span>
+            </div>
+            <span class="text-[11px] text-[#98989a] font-mono-tech">Baixa 100% via Excel</span>
+          </div>
+          <div id="lista-pendencias-cco" class="divide-y divide-[#232d3d]"></div>
+        </div>
+
+        <div class="corp-card rounded-2xl overflow-hidden border border-[#00379e]/60">
+          <div class="bg-[#131924] px-4 py-3.5 border-b border-[#232d3d] flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-extrabold uppercase tracking-wider text-white">Espelho / Simulador da Planilha manuntecao.xlsm</span>
+                <span class="px-2 py-0.5 rounded bg-[#090c12] border border-[#232d3d] font-mono-tech text-[10px] text-[#95d324]">Colunas Reais: Início &amp; Fim</span>
+              </div>
+              <p class="text-xs text-[#98989a] mt-0.5">Teste o apontamento do Controlador ou sincronize direto com o arquivo público do Google Drive.</p>
+            </div>
+            <form id="form-simulador-xlsm-entrada" class="flex flex-wrap items-center gap-2">
+              <select id="xlsm-nova-frota" class="bg-[#090c12] border border-[#232d3d] rounded-lg px-2.5 py-1.5 text-xs font-mono-tech text-white"></select>
+              <input type="text" id="xlsm-novo-comentario" required placeholder="COMENTÁRIO DA PARADA..." class="bg-[#090c12] border border-[#232d3d] rounded-lg px-2.5 py-1.5 text-xs text-white uppercase w-48" />
+              <button type="submit" class="px-3 py-1.5 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-xs font-bold transition cursor-pointer">+ Gravar Início</button>
+            </form>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-[#0c1017] border-b border-[#232d3d] font-mono-tech text-[10px] uppercase text-[#98989a]">
+                  <th class="py-2.5 px-3">Frota</th><th class="py-2.5 px-3">Categoria</th><th class="py-2.5 px-3 text-[#95d324]">Início</th>
+                  <th class="py-2.5 px-3 text-amber-300">Fim</th><th class="py-2.5 px-3">Especialidade</th><th class="py-2.5 px-3">Executante</th>
+                  <th class="py-2.5 px-3">Horímetro</th><th class="py-2.5 px-3">Tipo</th><th class="py-2.5 px-3">Comentário</th><th class="py-2.5 px-3 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-simulador-xlsm" class="divide-y divide-[#232d3d] bg-[#10151e]"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA 5: GESTÃO DE ACESSOS -->
+      <section id="aba-acessos" class="hidden space-y-4">
+        <div class="corp-card rounded-2xl p-5">
+          <span class="text-[10px] font-bold uppercase tracking-widest text-[#95d324]">Administração de Segurança</span>
+          <h2 class="text-base font-extrabold text-white">Gestão de Usuários e Permissões de Acesso</h2>
+          <p class="text-xs text-[#98989a]">Controle de perfis operacionais do Painel QHA &amp; Ordens de Serviço Fagundes.</p>
+        </div>
+        <div class="corp-card rounded-2xl overflow-hidden">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#161d29] border-b border-[#232d3d] font-mono-tech uppercase text-[11px] text-[#98989a]">
+                <th class="py-3 px-4">Login</th><th class="py-3 px-4">Nome Completo</th><th class="py-3 px-4">Matrícula</th><th class="py-3 px-4">Perfil</th><th class="py-3 px-4">Abas Liberadas</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-gestao-acessos" class="divide-y divide-[#232d3d]"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: HISTÓRICO TÉCNICO -->
+  <div id="modal-historico" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl bg-[#10151e] border border-[#232d3d] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+      <div class="bg-[#161d29] px-5 py-4 border-b border-[#232d3d] flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <span id="modal-hist-frota" class="px-3 py-1 rounded-lg bg-[#00379e] text-white font-mono-tech font-extrabold text-sm">EH697</span>
+          <div>
+            <h3 id="modal-hist-titulo" class="text-sm sm:text-base font-extrabold text-white">Histórico Técnico do Equipamento</h3>
+            <p id="modal-hist-subtitulo" class="text-xs text-[#98989a]">Intervenções anteriores e serviços executados</p>
+          </div>
+        </div>
+        <button type="button" id="btn-fechar-modal-hist" class="w-8 h-8 rounded-lg bg-[#090c12] hover:bg-[#232d3d] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
+      <div id="modal-hist-corpo" class="p-5 overflow-y-auto space-y-3.5 flex-1"></div>
+      <div class="bg-[#161d29] px-5 py-3 border-t border-[#232d3d] flex justify-between items-center">
+        <span class="text-[11px] font-mono-tech text-[#98989a]">Base Histórica • manuntecao.xlsm</span>
+        <button type="button" id="btn-rodape-fechar-hist" class="px-4 py-2 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-xs font-bold cursor-pointer">Fechar Histórico</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: FINALIZAR OS PELO MECÂNICO (GRAVA LOG RETIRADA + FOTO NO DRIVE) -->
+  <div id="modal-finalizar-os" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-[#10151e] border border-[#232d3d] rounded-2xl shadow-2xl overflow-hidden">
+      <div class="bg-[#161d29] px-5 py-4 border-b border-[#232d3d] flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-[#95d324]">Conclusão Técnica • Grava Log de Retirada no Drive</span>
+          <h3 class="text-base font-extrabold text-white">Finalizar OS • <span id="fin-os-titulo" class="font-mono-tech text-[#95d324]"></span></h3>
+        </div>
+        <button type="button" id="btn-fechar-modal-fin" class="w-8 h-8 rounded-lg bg-[#090c12] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
+
+      <form id="form-finalizar-os" class="p-5 space-y-3.5">
+        <input type="hidden" id="fin-os-id" />
+        <div class="bg-[#090c12] border border-[#232d3d] rounded-xl p-3 text-xs text-[#98989a]">
+          Grava o serviço no <strong class="text-white">Histórico Técnico</strong>, salva o log + foto na aba <strong>Retirada</strong> (<code>log_retirada_equipamentos.xlsx</code>) e envia pendência de baixa ao CCO.
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Serviço Executado *</label>
+          <textarea id="fin-os-servico" rows="2" required placeholder="Descreva o reparo realizado e testes efetuados..." class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#95d324] focus:outline-none"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Peças Substituídas *</label>
+            <input type="text" id="fin-os-pecas" required placeholder="Ex: Mangueira 1 pol., Kit vedações" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#95d324] focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Horímetro Atual (h) *</label>
+            <input type="number" id="fin-os-horimetro" required placeholder="Ex: 14850" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs font-mono-tech text-white focus:border-[#95d324] focus:outline-none" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">📷 Foto da Liberação / Serviço Concluído (Opcional)</label>
+          <input type="file" id="fin-os-foto" accept="image/*" capture="environment" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-1.5 text-xs text-neutral-300" />
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="btn-cancelar-modal-fin" class="px-4 py-2 rounded-lg bg-[#161d29] text-neutral-300 text-xs font-semibold cursor-pointer">Cancelar</button>
+          <button type="submit" id="btn-submit-fin-os" class="px-5 py-2 rounded-lg bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] text-xs font-extrabold cursor-pointer">✓ Finalizar &amp; Salvar no Drive</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: VISUALIZAR FOTO -->
+  <div id="modal-foto" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-[#10151e] border border-[#232d3d] rounded-2xl overflow-hidden shadow-2xl">
+      <div class="bg-[#161d29] px-5 py-3.5 border-b border-[#232d3d] flex items-center justify-between">
+        <h3 id="modal-foto-titulo" class="text-sm font-bold text-white">Evidência Fotográfica da OS</h3>
+        <button type="button" id="btn-fechar-modal-foto" class="w-8 h-8 rounded-lg bg-[#090c12] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
+      <div class="p-4 bg-[#090c12] flex items-center justify-center">
+        <img id="modal-foto-img" src="" alt="Foto da OS" class="max-h-[65vh] w-auto rounded-xl border border-[#232d3d]" />
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
   <script>
-    function lerImagemBase64(input) {
-      return new Promise((resolve) => {
-        const file = input.files[0];
-        if (!file) return resolve("");
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
-    }
+    (function () {
+      'use strict';
 
-    async function carregarManutencao() {
-      try {
-        const res = await fetch("/api/em-manutencao");
-        const data = await res.json();
-        document.getElementById("total-manutencao").textContent = data.total || 0;
+      const USUARIOS_SISTEMA = {
+        encarregado: {
+          login: 'encarregado', senha: '123', nome: 'Encarregado de Oficina', matricula: 'Mat. 0841', sigla: 'ENC', perfil: 'ENCARREGADO',
+          abas: [{ id: 'quadro', label: '1. Quadro de Manutenções (QHA)' }, { id: 'os', label: '2. Ordens de Serviço (OS)' }]
+        },
+        clecio: {
+          login: 'clecio', senha: '123', nome: 'Clecio Ribeiro dos Santos', matricula: 'Mat. 1328', sigla: 'MEC', perfil: 'MECANICO',
+          abas: [{ id: 'quadro', label: '1. Quadro de Manutenções (QHA)' }, { id: 'minhas-os', label: '2. Minhas OS (Lista)' }]
+        },
+        controlador: {
+          login: 'controlador', senha: '123', nome: 'Controlador CCO', matricula: 'Mat. 0512', perfil: 'CONTROLADOR', sigla: 'CCO',
+          abas: [{ id: 'pendencias', label: '1. Fila de Pendências (manuntecao.xlsm)' }]
+        },
+        admin: {
+          login: 'admin', senha: '123', nome: 'Administrador Geral', matricula: 'Mat. 0001', sigla: 'ADM', perfil: 'ADMINISTRADOR',
+          abas: [
+            { id: 'quadro', label: '1. Quadro de Manutenções (QHA)' }, { id: 'os', label: '2. Ordens de Serviço (OS)' },
+            { id: 'minhas-os', label: '3. Minhas OS (Lista)' }, { id: 'pendencias', label: '4. Fila de Pendências (xlsm)' },
+            { id: 'acessos', label: '5. Gestão de Acessos' }
+          ]
+        }
+      };
 
-        const tbody = document.getElementById("tabela-manutencao");
-        if (!data.equipamentos || data.equipamentos.length === 0) {
-          tbody.innerHTML = "<tr><td colspan='4'>Nenhum equipamento em manutenção.</td></tr>";
+      const CATALOGO_FROTAS = [
+        { frota: 'C1964', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 21450 },
+        { frota: 'C1983', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 24110 },
+        { frota: 'C2201', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 16200 },
+        { frota: 'C2205', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 15890 },
+        { frota: 'C2207', categoria: 'EQUIPAMENTO MINA', local: 'LIB0750 272 SW', horimetro: 15430 },
+        { frota: 'C2212', categoria: 'EQUIPAMENTO DRYSTACK', local: 'FILTRO PRENSA', horimetro: 14980 },
+        { frota: 'C2330', categoria: 'EQUIPAMENTO ALIMENTACAO', local: 'BRITAGEM', horimetro: 12300 },
+        { frota: 'CR54', categoria: 'EQUIPAMENTO INFRA', local: 'PCH47', horimetro: 18750 },
+        { frota: 'EH003', categoria: 'EQUIPAMENTO AUXILIAR', local: 'PÁTIO APOIO', horimetro: 11200 },
+        { frota: 'EH697', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 14820 },
+        { frota: 'EH711', categoria: 'EQUIPAMENTO MINA', local: 'CAVA SUL', horimetro: 13940 },
+        { frota: 'EH720', categoria: 'EQUIPAMENTO DRYSTACK', local: 'FILTRO PRENSA', horimetro: 9410 },
+        { frota: 'EH726', categoria: 'EQUIPAMENTO MINA', local: 'FRENTE LESTE', horimetro: 8795 }
+      ];
+
+      let planilhaXlsmRows = [
+        { rowId: 'ROW-01', frota: 'C1964', categoria: 'EQUIPAMENTO MINA', inicio: '07/11/2026 08:15', fim: '', duracaoMin: 13270.05, especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', matricula: '1104', executante: 'Marcos Vinícius', horimetro: 21450, tipo: 'Corretiva', local: 'OFICINA FAGUNDES', comentario: 'SERVICO DE SOLDA NO TANQUE DAGUA DO IMPLEMENTO' },
+        { rowId: 'ROW-02', frota: 'C2207', categoria: 'EQUIPAMENTO MINA', inicio: '14/11/2026 10:30', fim: '', duracaoMin: 3048.38, especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', matricula: '1492', executante: 'Rodrigo Alves', horimetro: 15430, tipo: 'Corretiva', local: 'LIB0750 272 SW', comentario: 'FALHA NOS FREIOS' },
+        { rowId: 'ROW-03', frota: 'C2212', categoria: 'EQUIPAMENTO DRYSTACK', inicio: '13/11/2026 00:25', fim: '', duracaoMin: 5099.68, especialidade: 'MANUTENCAO 206 MANUTENCAO CORRETIVA ELETRICA', matricula: '1219', executante: 'Anderson Lima', horimetro: 14980, tipo: 'Corretiva', local: 'FILTRO PRENSA', comentario: 'SUBSTITUICAO DA CAIXA DE CAMBIO' },
+        { rowId: 'ROW-04', frota: 'C2330', categoria: 'EQUIPAMENTO ALIMENTACAO', inicio: '12/11/2026 06:50', fim: '', duracaoMin: 6148.17, especialidade: 'MANUTENCAO 207 MANUTENCAO PREVENTIVA', matricula: '1328', executante: 'Clecio Ribeiro dos Santos', horimetro: 12300, tipo: 'Preventiva', local: 'BRITAGEM', comentario: 'PREVENTIVA' },
+        { rowId: 'ROW-05', frota: 'CR54', categoria: 'EQUIPAMENTO INFRA', inicio: '03/11/2026 23:20', fim: '', duracaoMin: 18120.18, especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', matricula: '1104', executante: 'Marcos Vinícius', horimetro: 18750, tipo: 'Corretiva', local: 'PCH47', comentario: 'FALHA NOS FREIOS' },
+        { rowId: 'ROW-06', frota: 'EH003', categoria: 'EQUIPAMENTO AUXILIAR', inicio: '15/11/2026 20:00', fim: '', duracaoMin: 1039.83, especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', matricula: '1492', executante: 'Rodrigo Alves', horimetro: 11200, tipo: 'Corretiva', local: 'PÁTIO APOIO', comentario: 'TROCA DE CONCHA' },
+        { rowId: 'ROW-07', frota: 'EH697', categoria: 'EQUIPAMENTO MINA', inicio: '26/10/2026 12:50', fim: '', duracaoMin: 30271.83, especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', matricula: '1328', executante: 'Clecio Ribeiro dos Santos', horimetro: 14820, tipo: 'Corretiva', local: 'OFICINA FAGUNDES', comentario: 'PONTEIRA DO MARTELO QUEBRADO' },
+        { rowId: 'ROW-08', frota: 'EH720', categoria: 'EQUIPAMENTO DRYSTACK', inicio: '08/11/2026 12:25', fim: '', duracaoMin: 11576.22, especialidade: 'MANUTENCAO 214 MANUTENCAO AR CONDICIONADO', matricula: '1219', executante: 'Anderson Lima', horimetro: 9410, tipo: 'Corretiva', local: 'FILTRO PRENSA', comentario: 'AR CONDICIONADO' }
+      ];
+
+      let ordensServico = [
+        { id: 'OS-1041', frota: 'EH697', tipo: 'Corretiva', especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', descricao: 'PONTEIRA DO MARTELO QUEBRADO E VAZAMENTO NO BLOCO HIDRÁULICO', mecanico: 'Clecio Ribeiro dos Santos (Mat. 1328)', status: 'EM_EXECUCAO', abertura: '16/11/2026 07:40', foto: gerarSvgEvidencia('EH697', 'Corretiva', 'PONTEIRA DO MARTELO QUEBRADO') },
+        { id: 'OS-1042', frota: 'C2205', tipo: 'Corretiva', especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', descricao: 'COMANDO DE VALVULA TRAVANDO AO BASULAR CARGA', mecanico: 'Clecio Ribeiro dos Santos (Mat. 1328)', status: 'DESTINADA', abertura: '16/11/2026 11:15', foto: gerarSvgEvidencia('C2205', 'Corretiva', 'COMANDO DE VALVULA TRAVANDO') },
+        { id: 'OS-1043', frota: 'C2330', tipo: 'Preventiva', especialidade: 'MANUTENCAO 207 MANUTENCAO PREVENTIVA', descricao: 'PREVENTIVA 500H • TROCA DE ELEMENTOS FILTRANTES E LUBRIFICAÇÃO', mecanico: 'Clecio Ribeiro dos Santos (Mat. 1328)', status: 'DESTINADA', abertura: '16/11/2026 12:05', foto: null }
+      ];
+
+      let filaPendencias = [
+        { id: 'PEND-901', osId: 'OS-1042', frota: 'C2205', tipoPendencia: 'ENTRADA', motivo: 'OS aberta pelo Encarregado • Aguardando apontamento de "Início" em manuntecao.xlsm', solicitante: 'Encarregado de Oficina', criadoEm: '16/11/2026 11:15' },
+        { id: 'PEND-902', osId: 'OS-1039', frota: 'EH720', tipoPendencia: 'BAIXA', motivo: 'Serviço concluído na oficina • Aguardando preenchimento da coluna "Fim" em manuntecao.xlsm para liberar do QHA', solicitante: 'Clecio Ribeiro dos Santos (Mat. 1328)', criadoEm: '16/11/2026 12:30' }
+      ];
+
+      let historicoTecnicoDB = {
+        EH697: [
+          { osCode: 'OS-0988', data: '02/11/2026 14:20', horimetro: 14690, tipo: 'Corretiva', especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', falha: 'Queda de pressão no comando do braço hidráulico.', servico: 'Substituída válvula de alívio principal e purga da linha piloto.', pecas: 'Válvula alívio CAT 349-1182, O-rings viton', executante: 'Clecio Ribeiro dos Santos (Mat. 1328)' }
+        ],
+        C2205: [
+          { osCode: 'OS-0972', data: '25/10/2026 16:10', horimetro: 15610, tipo: 'Corretiva', especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', falha: 'Vazamento na linha de retorno da báscula.', servico: 'Substituída mangueira hidráulica de 1" e conexões JIC.', pecas: 'Mangueira 1" 4SH, Conexões JIC', executante: 'Clecio Ribeiro dos Santos (Mat. 1328)' }
+        ]
+      };
+
+      let estado = {
+        usuarioAtual: null, abaAtiva: 'quadro', qhaCategoriaFiltro: 'TODAS',
+        linhaQhaSelecionada: null, fotoAnexadaDataUrl: null, segundosRestantesVarredura: 600
+      };
+
+      // =====================================================================
+      // INTEGRAÇÃO REAL COM FLASK + GOOGLE DRIVE (manuntecao.xlsm & Apps Script)
+      // =====================================================================
+      async function sincronizarComPlanilhaRealDrive(notificar = false) {
+        try {
+          const res = await fetch('/api/em-manutencao');
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && Array.isArray(data.equipamentos) && data.equipamentos.length > 0) {
+            planilhaXlsmRows = data.equipamentos.map((eq, idx) => {
+              const catInfo = CATALOGO_FROTAS.find((f) => f.frota === eq.equipamento) || {
+                categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 15000
+              };
+              return {
+                rowId: `DRIVE-${idx + 1}`,
+                frota: eq.equipamento,
+                categoria: catInfo.categoria,
+                inicio: eq.inicio,
+                fim: '',
+                duracaoMin: 120.0,
+                especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
+                matricula: '1328',
+                executante: eq.mecanico || '-',
+                horimetro: catInfo.horimetro,
+                tipo: 'Corretiva',
+                local: catInfo.local,
+                comentario: eq.motivo || 'EM MANUTENÇÃO'
+              };
+            });
+            if (notificar) {
+              mostrarToast('Planilha Sincronizada', `${data.equipamentos.length} ativo(s) carregado(s) de manuntecao.xlsm.`, 'success');
+            }
+            executarVarreduraPlanilha(false);
+          } else if (notificar) {
+            mostrarToast('Sincronização Drive', 'Planilha lida com sucesso (usando base local enquanto PUBLIC_FILE_ID não retorna linhas ativas).', 'info');
+          }
+        } catch (err) {
+          if (notificar) {
+            mostrarToast('Modo Local Ativo', 'Servidor backend indisponível no momento; operando com base local.', 'warning');
+          }
+        }
+      }
+
+      async function gravarLogNoGoogleDrive(tipo, payload) {
+        try {
+          const endpoint = tipo === 'entrada' ? '/api/log/entrada' : '/api/log/retirada';
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            mostrarToast('Google Drive Atualizado', `Log de ${tipo.toUpperCase()} e planilha .xlsx salvos na pasta Logs_Manutencao.`, 'success');
+          }
+        } catch (err) {
+          console.warn('Falha ao gravar no backend:', err);
+        }
+      }
+
+      function lerArquivoBase64(file) {
+        return new Promise((resolve) => {
+          if (!file) return resolve('');
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function gerarSvgEvidencia(frota, tipo, texto) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+          <rect width="640" height="360" fill="#10151e"/><rect x="20" y="20" width="600" height="320" rx="14" fill="#161d29" stroke="#00379e" stroke-width="3"/>
+          <rect x="40" y="42" width="130" height="36" rx="8" fill="#00379e"/><text x="105" y="66" fill="#ffffff" font-family="monospace" font-weight="bold" font-size="18" text-anchor="middle">${frota}</text>
+          <text x="190" y="66" fill="#95d324" font-family="sans-serif" font-weight="bold" font-size="15">EVIDÊNCIA DE CAMPO • ${tipo.toUpperCase()}</text>
+          <line x1="40" y1="95" x2="600" y2="95" stroke="#232d3d" stroke-width="2"/><text x="40" y="145" fill="#f3f4f6" font-family="sans-serif" font-weight="bold" font-size="18">${texto.slice(0, 46)}</text>
+          <text x="40" y="185" fill="#98989a" font-family="monospace" font-size="14">REGISTRO FOTOGRÁFICO • FAGUNDES CONSTRUÇÃO E MINERAÇÃO</text>
+        </svg>`;
+        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      }
+
+      async function acionarSireneIndustrial(isTeste = false) {
+        try {
+          if (typeof Tone !== 'undefined') {
+            await Tone.start();
+            const osc = new Tone.Oscillator({ type: 'sawtooth', frequency: 540 }).toDestination();
+            const lfo = new Tone.LFO({ frequency: 2.8, min: 450, max: 820 }).start();
+            lfo.connect(osc.frequency);
+            osc.volume.value = -14;
+            osc.start();
+            setTimeout(() => { osc.stop(); lfo.stop(); osc.dispose(); lfo.dispose(); }, 1400);
+          }
+          if (isTeste) mostrarToast('Sirene Industrial LFO', 'Alerta sonoro testado com sucesso.', 'info');
+        } catch (e) {}
+      }
+
+      function mostrarToast(titulo, mensagem, tipo = 'success') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        const borda = tipo === 'success' ? 'border-l-[#95d324]' : tipo === 'warning' ? 'border-l-amber-400' : 'border-l-[#00379e]';
+        const el = document.createElement('div');
+        el.className = `pointer-events-auto bg-[#161d29] border border-[#232d3d] border-l-4 ${borda} rounded-xl p-3.5 shadow-2xl transition-all duration-300`;
+        el.innerHTML = `<div class="text-xs font-bold text-white">${titulo}</div><div class="text-[11px] text-[#98989a] mt-0.5 leading-snug">${mensagem}</div>`;
+        container.appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4500);
+      }
+
+      function agoraFormatado() {
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+
+      function horaAtualSegundos() { return new Date().toLocaleTimeString('pt-BR'); }
+
+      function executarVarreduraPlanilha(origemManual = false) {
+        let removidasEntrada = [], removidasBaixa = [];
+        filaPendencias = filaPendencias.filter((pend) => {
+          const linhasFrota = planilhaXlsmRows.filter((r) => r.frota === pend.frota);
+          if (pend.tipoPendencia === 'ENTRADA') {
+            if (linhasFrota.some((r) => r.inicio.trim() !== '' && r.fim.trim() === '')) {
+              removidasEntrada.push(pend.frota);
+              return false;
+            }
+            return true;
+          }
+          if (pend.tipoPendencia === 'BAIXA') {
+            const aindaSemFim = linhasFrota.some((r) => r.inicio.trim() !== '' && r.fim.trim() === '');
+            const temComFim = linhasFrota.some((r) => r.fim.trim() !== '');
+            if (!aindaSemFim && temComFim) {
+              removidasBaixa.push(pend.frota);
+              return false;
+            }
+            return true;
+          }
+          return true;
+        });
+
+        const kpiSync = document.getElementById('kpi-ultima-atualizacao');
+        if (kpiSync) kpiSync.textContent = horaAtualSegundos();
+        estado.segundosRestantesVarredura = 600;
+        atualizarDisplayTimer10m();
+        renderizarTudo();
+
+        if (removidasBaixa.length > 0) {
+          const frotasTxt = removidasBaixa.join(', ');
+          document.getElementById('banner-alerta-titulo').textContent = `FROTA(S) LIBERADA(S) DO QHA: ${frotasTxt}`;
+          document.getElementById('banner-alerta-detalhe').textContent = `Horário "Fim" confirmado em manuntecao.xlsm às ${horaAtualSegundos()}.`;
+          document.getElementById('banner-alerta-saida').classList.remove('hidden');
+          acionarSireneIndustrial(false);
+          mostrarToast('Baixa Automática Confirmada', `Frota(s) ${frotasTxt} removida(s) do QHA e da fila.`, 'success');
+        } else if (removidasEntrada.length > 0) {
+          mostrarToast('Entrada Sincronizada', `Frota(s) ${removidasEntrada.join(', ')} excluída(s) da fila.`, 'info');
+        } else if (origemManual) {
+          mostrarToast('Varredura Concluída', 'Planilha manuntecao.xlsm verificada.', 'info');
+        }
+      }
+
+      function atualizarDisplayTimer10m() {
+        const min = Math.floor(estado.segundosRestantesVarredura / 60);
+        const seg = estado.segundosRestantesVarredura % 60;
+        const formatado = `${String(min).padStart(2, '0')}:${String(seg).padStart(2, '0')}`;
+        const elH = document.getElementById('header-timer-10m');
+        const elC = document.getElementById('cco-countdown-display');
+        if (elH) elH.textContent = formatado;
+        if (elC) elC.textContent = formatado;
+      }
+
+      function renderizarQuadroQHA() {
+        const tbody = document.getElementById('tbody-qha-industrial');
+        if (!tbody) return;
+        const ativos = planilhaXlsmRows.filter((row) => row.inicio.trim() !== '' && row.fim.trim() === '');
+        document.getElementById('kpi-total-manutencao').textContent = ativos.length;
+        const busca = (document.getElementById('qha-busca-texto')?.value || '').trim().toUpperCase();
+
+        const filtrados = ativos.filter((row) => {
+          const matchCat = estado.qhaCategoriaFiltro === 'TODAS' || row.categoria === estado.qhaCategoriaFiltro;
+          const matchBusca = !busca || row.frota.toUpperCase().includes(busca) || row.especialidade.toUpperCase().includes(busca) || row.comentario.toUpperCase().includes(busca);
+          return matchCat && matchBusca;
+        });
+
+        document.getElementById('qha-contador-filtrado').textContent = `${filtrados.length} equipamento${filtrados.length === 1 ? '' : 's'}`;
+        if (filtrados.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: #4b5563; font-weight: 600;">Nenhum equipamento ativo em manutenção para o filtro selecionado.</td></tr>`;
           return;
         }
-
-        tbody.innerHTML = data.equipamentos.map(eq => `
-          <tr>
-            <td><strong>${eq.equipamento}</strong></td>
-            <td>${eq.inicio}</td>
-            <td>${eq.motivo}</td>
-            <td>${eq.mecanico}</td>
+        tbody.innerHTML = filtrados.map((row) => `
+          <tr data-qha-frota="${row.frota}" class="${estado.linhaQhaSelecionada === row.frota ? 'linha-selecionada' : ''}">
+            <td class="font-bold font-mono-tech">${row.frota}</td>
+            <td class="celula-vermelha-qha">MANUTENÇÃO</td>
+            <td class="celula-vermelha-qha">${row.especialidade}</td>
+            <td class="font-mono-tech">${Number(row.duracaoMin).toFixed(2)}</td>
+            <td class="font-mono-tech">${(Number(row.duracaoMin) / 60).toFixed(2)}</td>
+            <td class="uppercase">${row.comentario}</td>
           </tr>
-        `).join("");
-      } catch (e) {
-        console.error(e);
+        `).join('');
       }
-    }
 
-    async function enviarEntrada() {
-      const btn = document.getElementById("btn-ent");
-      btn.disabled = true; btn.textContent = "Enviando...";
-      const foto = await lerImagemBase64(document.getElementById("ent-foto"));
+      function renderizarListaMecanico() {
+        const tbody = document.getElementById('tbody-lista-mecanico');
+        if (!tbody) return;
+        const user = estado.usuarioAtual;
+        if (user) document.getElementById('badge-mecanico-ativo').textContent = `${user.nome} (${user.matricula})`;
+        const minhas = ordensServico.filter((os) => os.status !== 'CONCLUIDA' && (user?.perfil === 'ADMINISTRADOR' || os.mecanico.includes('Clecio')));
+        document.getElementById('contador-minhas-os').textContent = `${minhas.length} Ativa${minhas.length === 1 ? '' : 's'}`;
 
-      const payload = {
-        id_os: document.getElementById("ent-os").value,
-        equipamento: document.getElementById("ent-equip").value,
-        frota: document.getElementById("ent-frota").value,
-        motivo: document.getElementById("ent-motivo").value,
-        prioridade: document.getElementById("ent-prio").value,
-        usuario: document.getElementById("ent-user").value,
-        imagem_base64: foto
-      };
-      const res = await fetch("/api/log/entrada", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      btn.disabled = false; btn.textContent = "Salvar Log de Entrada";
-      if (res.ok) alert("Log de ENTRADA e foto salvos no Google Drive!");
-    }
+        if (minhas.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" class="py-8 px-4 text-center text-[#98989a]">Nenhuma Ordem de Serviço ativa na sua lista.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = minhas.map((os) => {
+          const histCount = (historicoTecnicoDB[os.frota] || []).length;
+          const isEmExec = os.status === 'EM_EXECUCAO';
+          return `
+            <tr class="hover:bg-[#161d29] transition">
+              <td class="py-3 px-3.5 font-mono-tech font-bold text-[#95d324] whitespace-nowrap">${os.id}</td>
+              <td class="py-3 px-3.5 whitespace-nowrap"><span class="px-2.5 py-1 rounded bg-[#00379e] text-white font-mono-tech font-extrabold text-xs">${os.frota}</span></td>
+              <td class="py-3 px-3.5 whitespace-nowrap"><span class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${os.tipo === 'Corretiva' ? 'bg-rose-500/15 text-rose-300 border-rose-500/30' : 'bg-[#95d324]/15 text-[#95d324] border-[#95d324]/30'}">${os.tipo}</span></td>
+              <td class="py-3 px-3.5 text-neutral-300 font-medium whitespace-nowrap">${os.especialidade.replace(/^MANUTEN[CÇ][AÃ]O\s+\d+\s+/i, '')}</td>
+              <td class="py-3 px-3.5 text-white font-medium max-w-xs truncate">${os.descricao}</td>
+              <td class="py-3 px-3.5 whitespace-nowrap">${isEmExec ? '<span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono-tech text-[10px] font-bold">EM EXECUÇÃO</span>' : '<span class="px-2 py-0.5 rounded-full bg-[#00379e]/40 text-blue-200 border border-[#00379e] font-mono-tech text-[10px] font-bold">DESTINADA</span>'}</td>
+              <td class="py-3 px-3.5 text-right whitespace-nowrap">
+                <div class="inline-flex items-center justify-end gap-1.5">
+                  <button type="button" data-acao="abrir-historico" data-frota="${os.frota}" class="px-2.5 py-1.5 rounded-lg bg-[#161d29] hover:bg-[#1f293a] border border-[#00379e] text-blue-200 text-[11px] font-bold cursor-pointer">📋 Histórico (${histCount})</button>
+                  ${os.foto ? `<button type="button" data-acao="ver-foto" data-os-id="${os.id}" class="px-2.5 py-1.5 rounded-lg bg-[#161d29] border border-[#232d3d] text-neutral-200 text-[11px] font-semibold cursor-pointer">📷 Foto</button>` : ''}
+                  ${!isEmExec
+                    ? `<button type="button" data-acao="iniciar-os" data-os-id="${os.id}" class="px-3 py-1.5 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-[11px] font-bold cursor-pointer">▶ Iniciar</button>`
+                    : `<button type="button" data-acao="abrir-finalizar" data-os-id="${os.id}" class="px-3 py-1.5 rounded-lg bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] text-[11px] font-extrabold cursor-pointer">✓ Finalizar</button>`}
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
 
-    async function enviarRetirada() {
-      const btn = document.getElementById("btn-ret");
-      btn.disabled = true; btn.textContent = "Enviando...";
-      const foto = await lerImagemBase64(document.getElementById("ret-foto"));
+      function renderizarOsEncarregado() {
+        const container = document.getElementById('lista-os-encarregado');
+        if (!container) return;
+        document.getElementById('contador-os-geral').textContent = `${ordensServico.length} OS`;
+        container.innerHTML = ordensServico.map((os) => {
+          const histCount = (historicoTecnicoDB[os.frota] || []).length;
+          const badge = os.status === 'DESTINADA'
+            ? '<span class="px-2 py-0.5 rounded bg-[#00379e]/40 text-blue-200 border border-[#00379e] font-mono-tech text-[10px] font-bold">DESTINADA</span>'
+            : os.status === 'EM_EXECUCAO'
+            ? '<span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono-tech text-[10px] font-bold">EM EXECUÇÃO</span>'
+            : '<span class="px-2 py-0.5 rounded bg-[#95d324]/20 text-[#95d324] border border-[#95d324]/40 font-mono-tech text-[10px] font-bold">CONCLUÍDA</span>';
+          return `
+            <div class="bg-[#161d29] border border-[#232d3d] rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="space-y-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="px-2 py-0.5 rounded bg-[#00379e] text-white font-mono-tech font-bold text-xs">${os.frota}</span>
+                  <span class="font-mono-tech text-xs text-[#98989a]">${os.id}</span>
+                  <span class="text-[11px] font-bold ${os.tipo === 'Corretiva' ? 'text-rose-400' : 'text-[#95d324]'}">${os.tipo}</span>
+                  ${badge}
+                </div>
+                <div class="text-xs font-bold text-white truncate">${os.descricao}</div>
+                <div class="text-[11px] text-[#98989a] font-mono-tech">Mecânico: <span class="text-neutral-200">${os.mecanico}</span> • Abertura: ${os.abertura}</div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <button type="button" data-acao="abrir-historico" data-frota="${os.frota}" class="px-3 py-1.5 rounded-lg bg-[#10151e] hover:bg-[#00379e] border border-[#232d3d] text-xs font-bold text-blue-200 hover:text-white cursor-pointer">📋 Histórico (${histCount})</button>
+                ${os.foto ? `<button type="button" data-acao="ver-foto" data-os-id="${os.id}" class="px-2.5 py-1.5 rounded-lg bg-[#10151e] border border-[#232d3d] text-xs text-neutral-200 cursor-pointer">📷</button>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
 
-      const payload = {
-        id_os: document.getElementById("ret-os").value,
-        equipamento: document.getElementById("ret-equip").value,
-        frota: document.getElementById("ret-frota").value,
-        servico: document.getElementById("ret-serv").value,
-        mecanico: document.getElementById("ret-mec").value,
-        usuario: document.getElementById("ret-user").value,
-        imagem_base64: foto
-      };
-      const res = await fetch("/api/log/retirada", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      btn.disabled = false; btn.textContent = "Salvar Log de Retirada";
-      if (res.ok) alert("Log de RETIRADA e foto salvos no Google Drive!");
-    }
+      function renderizarFilaPendenciasESimulador() {
+        const listaPend = document.getElementById('lista-pendencias-cco');
+        const tbodyXlsm = document.getElementById('tbody-simulador-xlsm');
+        document.getElementById('cco-pendencias-badge').textContent = `${filaPendencias.length} pendente${filaPendencias.length === 1 ? '' : 's'}`;
 
-    carregarManutencao();
-    setInterval(carregarManutencao, 600000);
+        if (listaPend) {
+          listaPend.innerHTML = filaPendencias.length === 0
+            ? `<div class="p-8 text-center"><div class="text-sm font-bold text-[#95d324]">✓ Fila de Pendências Zerada</div><p class="text-xs text-[#98989a] mt-1">Todas as solicitações já estão sincronizadas com manuntecao.xlsm.</p></div>`
+            : filaPendencias.map((p) => `
+              <div class="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-[#161d29]/60 transition">
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="px-2.5 py-0.5 rounded bg-[#00379e] text-white font-mono-tech font-extrabold text-xs">${p.frota}</span>
+                    <span class="font-mono-tech text-xs text-[#98989a]">${p.osId}</span>
+                    ${p.tipoPendencia === 'ENTRADA'
+                      ? '<span class="px-2.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 font-mono-tech text-[10px] font-bold">AGUARDANDO "INÍCIO" NA PLANILHA</span>'
+                      : '<span class="px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono-tech text-[10px] font-bold">TRAVADO NO QHA • AGUARDANDO HORÁRIO "FIM"</span>'}
+                  </div>
+                  <p class="text-xs font-semibold text-white">${p.motivo}</p>
+                  <div class="text-[11px] text-[#98989a] font-mono-tech">Origem: ${p.solicitante} • ${p.criadoEm}</div>
+                </div>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#090c12] border border-[#232d3d] text-[11px] font-mono-tech text-[#98989a]">
+                  <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>Exclusão automática na varredura
+                </span>
+              </div>
+            `).join('');
+        }
+
+        if (tbodyXlsm) {
+          tbodyXlsm.innerHTML = planilhaXlsmRows.map((row) => {
+            const semFim = row.fim.trim() === '';
+            return `
+              <tr class="hover:bg-[#161d29] transition">
+                <td class="py-2.5 px-3 font-mono-tech font-bold text-white">${row.frota}</td>
+                <td class="py-2.5 px-3 text-[11px] text-[#98989a]">${row.categoria.replace('EQUIPAMENTO ', '')}</td>
+                <td class="py-2.5 px-3 font-mono-tech text-[#95d324] whitespace-nowrap">${row.inicio}</td>
+                <td class="py-2.5 px-3 font-mono-tech whitespace-nowrap ${semFim ? 'text-amber-300 font-bold' : 'text-neutral-300'}">${semFim ? 'VAZIO (ATIVO NO QHA)' : row.fim}</td>
+                <td class="py-2.5 px-3 text-[11px] text-neutral-300 max-w-[200px] truncate">${row.especialidade}</td>
+                <td class="py-2.5 px-3 text-[11px] text-neutral-300 whitespace-nowrap">${row.executante}</td>
+                <td class="py-2.5 px-3 font-mono-tech text-neutral-300">${row.horimetro}h</td>
+                <td class="py-2.5 px-3 text-[11px]">${row.tipo}</td>
+                <td class="py-2.5 px-3 text-[11px] text-white uppercase max-w-[180px] truncate">${row.comentario}</td>
+                <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                  ${semFim
+                    ? `<button type="button" data-acao="preencher-fim-xlsm" data-row-id="${row.rowId}" class="px-2.5 py-1 rounded bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] font-extrabold text-[11px] cursor-pointer">Preencher Fim Agora</button>`
+                    : `<span class="text-[11px] font-mono-tech text-[#95d324]">✓ Encerrado</span>`}
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      function abrirModalHistorico(frota) {
+        estado.linhaQhaSelecionada = frota;
+        renderizarQuadroQHA();
+        const catInfo = CATALOGO_FROTAS.find((f) => f.frota === frota);
+        const registros = historicoTecnicoDB[frota] || [];
+        document.getElementById('modal-hist-frota').textContent = frota;
+        document.getElementById('modal-hist-titulo').textContent = `Histórico Técnico • Frota ${frota}`;
+        document.getElementById('modal-hist-subtitulo').textContent = catInfo ? `${catInfo.categoria} • Horímetro Base: ${catInfo.horimetro}h` : `${registros.length} intervenção(ões)`;
+
+        const corpo = document.getElementById('modal-hist-corpo');
+        corpo.innerHTML = registros.length === 0
+          ? `<div class="bg-[#161d29] border border-[#232d3d] rounded-xl p-6 text-center"><div class="text-sm font-bold text-white">Nenhum histórico encerrado anterior para ${frota}</div></div>`
+          : registros.map((reg, i) => `
+            <div class="relative pl-5 border-l-2 ${i === 0 ? 'border-[#95d324]' : 'border-[#00379e]'} space-y-1.5">
+              <span class="absolute -left-[7px] top-1 w-3 h-3 rounded-full ${i === 0 ? 'bg-[#95d324]' : 'bg-[#00379e]'} border-2 border-[#10151e]"></span>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2"><span class="font-mono-tech text-xs font-bold text-white">${reg.osCode}</span><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#95d324]/20 text-[#95d324]">${reg.tipo}</span></div>
+                <span class="font-mono-tech text-[11px] text-[#98989a]">${reg.data} • <strong class="text-white">${reg.horimetro}h</strong></span>
+              </div>
+              <div class="text-xs text-neutral-300"><strong>Falha:</strong> ${reg.falha}</div>
+              <div class="bg-[#161d29] border border-[#232d3d] rounded-lg p-2.5 text-xs space-y-1">
+                <div class="text-white"><strong class="text-[#95d324]">Serviço:</strong> ${reg.servico}</div>
+                <div class="text-[11px] text-[#98989a]">Peças: <span class="text-neutral-200">${reg.pecas}</span> • Exec.: <span class="text-blue-300">${reg.executante}</span></div>
+              </div>
+            </div>
+          `).join('');
+        const m = document.getElementById('modal-historico');
+        m.classList.remove('hidden'); m.classList.add('flex');
+      }
+
+      function renderizarBarraAbas() {
+        const nav = document.getElementById('barra-abas');
+        const user = estado.usuarioAtual;
+        if (!nav || !user) return;
+        if (!user.abas.some((a) => a.id === estado.abaAtiva)) estado.abaAtiva = user.abas[0].id;
+
+        nav.innerHTML = user.abas.map((aba) => {
+          const ativa = aba.id === estado.abaAtiva;
+          let badge = '';
+          if (aba.id === 'pendencias') badge = `<span class="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono-tech ${ativa ? 'bg-[#95d324] text-[#090c12] font-extrabold' : 'bg-[#232d3d] text-white'}">${filaPendencias.length}</span>`;
+          if (aba.id === 'minhas-os') {
+            const qtd = ordensServico.filter((o) => o.status !== 'CONCLUIDA' && (user.perfil === 'ADMINISTRADOR' || o.mecanico.includes('Clecio'))).length;
+            badge = `<span class="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono-tech ${ativa ? 'bg-[#95d324] text-[#090c12] font-extrabold' : 'bg-[#232d3d] text-white'}">${qtd}</span>`;
+          }
+          return `<button type="button" data-aba-id="${aba.id}" class="btn-aba px-3.5 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center cursor-pointer ${ativa ? 'bg-[#00379e] text-white shadow' : 'text-[#98989a] hover:text-white hover:bg-[#161d29]'}"><span>${aba.label}</span>${badge}</button>`;
+        }).join('');
+
+        ['quadro', 'os', 'minhas-os', 'pendencias', 'acessos'].forEach((secId) => {
+          const el = document.getElementById(`aba-${secId}`);
+          if (el) el.classList.toggle('hidden', secId !== estado.abaAtiva);
+        });
+      }
+
+      function renderizarGestaoAcessos() {
+        const tbody = document.getElementById('tbody-gestao-acessos');
+        if (!tbody) return;
+        tbody.innerHTML = Object.values(USUARIOS_SISTEMA).map((u) => `
+          <tr class="hover:bg-[#161d29]">
+            <td class="py-3 px-4 font-mono-tech font-bold text-[#95d324]">${u.login}</td>
+            <td class="py-3 px-4 font-semibold text-white">${u.nome}</td>
+            <td class="py-3 px-4 font-mono-tech text-neutral-300">${u.matricula}</td>
+            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-[#00379e]/40 border border-[#00379e] text-blue-200 font-mono-tech text-[10px] font-bold">${u.perfil}</span></td>
+            <td class="py-3 px-4 text-[#98989a]">${u.abas.map((a) => a.label).join(' • ')}</td>
+          </tr>
+        `).join('');
+      }
+
+      function renderizarTudo() {
+        renderizarBarraAbas();
+        renderizarQuadroQHA();
+        renderizarListaMecanico();
+        renderizarOsEncarregado();
+        renderizarFilaPendenciasESimulador();
+        renderizarGestaoAcessos();
+      }
+
+      function entrarNoSistema(loginKey) {
+        const user = USUARIOS_SISTEMA[loginKey];
+        if (!user) return;
+        estado.usuarioAtual = user;
+        estado.abaAtiva = user.abas[0].id;
+        document.getElementById('header-avatar-sigla').textContent = user.sigla;
+        document.getElementById('header-nome-usuario').textContent = user.nome;
+        document.getElementById('header-badge-perfil').textContent = `${user.perfil} • ${user.matricula}`;
+        document.getElementById('kpi-ultima-atualizacao').textContent = horaAtualSegundos();
+        document.getElementById('tela-login').classList.add('hidden');
+        document.getElementById('tela-sistema').classList.remove('hidden');
+        renderizarTudo();
+        sincronizarComPlanilhaRealDrive(false);
+        mostrarToast('Acesso Confirmado', `${user.nome} (${user.perfil}) autenticado.`, 'success');
+      }
+
+      function inicializar() {
+        const optionsHtml = CATALOGO_FROTAS.map((f) => `<option value="${f.frota}">${f.frota} (${f.categoria.replace('EQUIPAMENTO ', '')})</option>`).join('');
+        document.getElementById('os-frota').innerHTML = optionsHtml;
+        document.getElementById('xlsm-nova-frota').innerHTML = optionsHtml;
+
+        setInterval(() => {
+          if (!estado.usuarioAtual) return;
+          estado.segundosRestantesVarredura -= 1;
+          if (estado.segundosRestantesVarredura <= 0) {
+            sincronizarComPlanilhaRealDrive(false);
+            executarVarreduraPlanilha(false);
+          } else {
+            atualizarDisplayTimer10m();
+          }
+        }, 1000);
+
+        document.getElementById('form-login')?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const login = (document.getElementById('input-usuario').value || '').trim().toLowerCase();
+          const senha = (document.getElementById('input-senha').value || '').trim();
+          if (USUARIOS_SISTEMA[login] && senha === USUARIOS_SISTEMA[login].senha) {
+            document.getElementById('erro-login').classList.add('hidden');
+            entrarNoSistema(login);
+          } else {
+            document.getElementById('erro-login').classList.remove('hidden');
+          }
+        });
+
+        document.querySelectorAll('.btn-quick-login').forEach((btn) => {
+          btn.addEventListener('click', () => entrarNoSistema(btn.getAttribute('data-quick-user')));
+        });
+
+        document.getElementById('btn-sair-login')?.addEventListener('click', () => {
+          estado.usuarioAtual = null;
+          document.getElementById('tela-sistema').classList.add('hidden');
+          document.getElementById('tela-login').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-testar-sirene')?.addEventListener('click', () => acionarSireneIndustrial(true));
+        document.getElementById('btn-fechar-banner')?.addEventListener('click', () => document.getElementById('banner-alerta-saida')?.classList.add('hidden'));
+        document.getElementById('btn-sincronizar-planilha-real')?.addEventListener('click', () => sincronizarComPlanilhaRealDrive(true));
+
+        document.getElementById('barra-abas')?.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-aba-id]');
+          if (btn) { estado.abaAtiva = btn.getAttribute('data-aba-id'); renderizarTudo(); }
+        });
+
+        document.getElementById('qha-category-pills')?.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-qha-cat]');
+          if (!btn) return;
+          estado.qhaCategoriaFiltro = btn.getAttribute('data-qha-cat');
+          document.querySelectorAll('.qha-cat-btn').forEach((b) => {
+            b.className = b.getAttribute('data-qha-cat') === estado.qhaCategoriaFiltro
+              ? 'qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-[#00379e] text-white transition whitespace-nowrap cursor-pointer'
+              : 'qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer';
+          });
+          renderizarQuadroQHA();
+        });
+
+        document.getElementById('qha-busca-texto')?.addEventListener('input', renderizarQuadroQHA);
+        document.getElementById('tbody-qha-industrial')?.addEventListener('click', (e) => {
+          const tr = e.target.closest('tr[data-qha-frota]');
+          if (tr) abrirModalHistorico(tr.getAttribute('data-qha-frota'));
+        });
+
+        document.getElementById('btn-foto-simulada')?.addEventListener('click', () => {
+          const frota = document.getElementById('os-frota').value;
+          const tipo = document.getElementById('os-tipo').value;
+          const desc = document.getElementById('os-descricao').value.trim() || 'INSPEÇÃO TÉCNICA EM CAMPO';
+          estado.fotoAnexadaDataUrl = gerarSvgEvidencia(frota, tipo, desc);
+          document.getElementById('os-foto-preview-img').src = estado.fotoAnexadaDataUrl;
+          document.getElementById('os-foto-nome').textContent = `evidencia_${frota}.svg`;
+          document.getElementById('os-foto-preview-wrap').classList.remove('hidden');
+        });
+
+        document.getElementById('os-foto-input')?.addEventListener('change', async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          estado.fotoAnexadaDataUrl = await lerArquivoBase64(file);
+          document.getElementById('os-foto-preview-img').src = estado.fotoAnexadaDataUrl;
+          document.getElementById('os-foto-nome').textContent = file.name;
+          document.getElementById('os-foto-preview-wrap').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-remover-foto')?.addEventListener('click', () => {
+          estado.fotoAnexadaDataUrl = null;
+          document.getElementById('os-foto-input').value = '';
+          document.getElementById('os-foto-preview-wrap').classList.add('hidden');
+        });
+
+        // EMITIR NOVA OS -> GRAVA LOG DE ENTRADA NO GOOGLE DRIVE
+        document.getElementById('form-nova-os')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const btn = document.getElementById('btn-submit-nova-os');
+          btn.disabled = true; btn.textContent = 'Salvando no Google Drive...';
+
+          const frota = document.getElementById('os-frota').value;
+          const tipo = document.getElementById('os-tipo').value;
+          const especialidade = document.getElementById('os-especialidade').value;
+          const mecanico = document.getElementById('os-mecanico').value;
+          const descricao = document.getElementById('os-descricao').value.trim().toUpperCase();
+          const novaOsId = `OS-${Math.floor(1044 + Math.random() * 8900)}`;
+          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === frota);
+
+          ordensServico.unshift({
+            id: novaOsId, frota, tipo, especialidade, descricao, mecanico,
+            status: 'DESTINADA', abertura: agoraFormatado(), foto: estado.fotoAnexadaDataUrl
+          });
+
+          filaPendencias.unshift({
+            id: `PEND-${Math.floor(100 + Math.random() * 899)}`, osId: novaOsId, frota, tipoPendencia: 'ENTRADA',
+            motivo: 'OS aberta pelo Encarregado • Aguardando apontamento de "Início" em manuntecao.xlsm',
+            solicitante: estado.usuarioAtual ? estado.usuarioAtual.nome : 'Encarregado', criadoEm: agoraFormatado()
+          });
+
+          await gravarLogNoGoogleDrive('entrada', {
+            id_os: novaOsId,
+            equipamento: frota,
+            frota: catInfo ? catInfo.categoria : 'EQUIPAMENTO MINA',
+            motivo: `${tipo} - ${descricao}`,
+            prioridade: tipo === 'Corretiva' ? 'Alta' : 'Média',
+            usuario: estado.usuarioAtual ? estado.usuarioAtual.nome : 'Encarregado',
+            imagem_base64: estado.fotoAnexadaDataUrl || ''
+          });
+
+          document.getElementById('os-descricao').value = '';
+          estado.fotoAnexadaDataUrl = null;
+          document.getElementById('os-foto-preview-wrap').classList.add('hidden');
+          btn.disabled = false; btn.textContent = 'Emitir OS & Gravar Log de Entrada no Drive';
+
+          acionarSireneIndustrial(false);
+          renderizarTudo();
+        });
+
+        document.body.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-acao]');
+          if (!btn) return;
+          const acao = btn.getAttribute('data-acao');
+
+          if (acao === 'abrir-historico') abrirModalHistorico(btn.getAttribute('data-frota'));
+          if (acao === 'ver-foto') {
+            const os = ordensServico.find((o) => o.id === btn.getAttribute('data-os-id'));
+            if (os?.foto) {
+              document.getElementById('modal-foto-titulo').textContent = `Evidência Fotográfica • ${os.id} (${os.frota})`;
+              document.getElementById('modal-foto-img').src = os.foto;
+              const m = document.getElementById('modal-foto'); m.classList.remove('hidden'); m.classList.add('flex');
+            }
+          }
+          if (acao === 'iniciar-os') {
+            const os = ordensServico.find((o) => o.id === btn.getAttribute('data-os-id'));
+            if (os) { os.status = 'EM_EXECUCAO'; renderizarTudo(); mostrarToast('Atendimento Iniciado', `${os.id} (${os.frota}) Em Execução.`, 'info'); }
+          }
+          if (acao === 'abrir-finalizar') {
+            const os = ordensServico.find((o) => o.id === btn.getAttribute('data-os-id'));
+            const cat = CATALOGO_FROTAS.find((f) => f.frota === os?.frota);
+            if (os) {
+              document.getElementById('fin-os-id').value = os.id;
+              document.getElementById('fin-os-titulo').textContent = `${os.id} • ${os.frota}`;
+              document.getElementById('fin-os-servico').value = '';
+              document.getElementById('fin-os-pecas').value = '';
+              document.getElementById('fin-os-horimetro').value = cat ? cat.horimetro : 12000;
+              document.getElementById('fin-os-foto').value = '';
+              const m = document.getElementById('modal-finalizar-os'); m.classList.remove('hidden'); m.classList.add('flex');
+            }
+          }
+          if (acao === 'preencher-fim-xlsm') {
+            const row = planilhaXlsmRows.find((r) => r.rowId === btn.getAttribute('data-row-id'));
+            if (row) {
+              row.fim = agoraFormatado();
+              renderizarFilaPendenciasESimulador();
+              mostrarToast('Horário "Fim" Preenchido', `Linha de ${row.frota} encerrada. Clique em "Executar Varredura" para liberar do QHA.`, 'warning');
+            }
+          }
+        });
+
+        // FINALIZAR OS -> GRAVA LOG DE RETIRADA + FOTO NO GOOGLE DRIVE
+        document.getElementById('form-finalizar-os')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const btn = document.getElementById('btn-submit-fin-os');
+          btn.disabled = true; btn.textContent = 'Gravando no Drive...';
+
+          const osId = document.getElementById('fin-os-id').value;
+          const servico = document.getElementById('fin-os-servico').value.trim();
+          const pecas = document.getElementById('fin-os-pecas').value.trim();
+          const horimetro = Number(document.getElementById('fin-os-horimetro').value);
+          const fotoFile = document.getElementById('fin-os-foto').files?.[0];
+          const fotoBase64 = await lerArquivoBase64(fotoFile);
+
+          const os = ordensServico.find((o) => o.id === osId);
+          if (!os) return;
+          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === os.frota);
+
+          os.status = 'CONCLUIDA';
+          if (!historicoTecnicoDB[os.frota]) historicoTecnicoDB[os.frota] = [];
+          historicoTecnicoDB[os.frota].unshift({
+            osCode: os.id, data: agoraFormatado(), horimetro, tipo: os.tipo,
+            especialidade: os.especialidade, falha: os.descricao, servico, pecas, executante: os.mecanico
+          });
+
+          filaPendencias.unshift({
+            id: `PEND-${Math.floor(100 + Math.random() * 899)}`, osId: os.id, frota: os.frota, tipoPendencia: 'BAIXA',
+            motivo: 'OS finalizada pelo mecânico • Permanece no QHA até preenchimento da coluna "Fim" em manuntecao.xlsm',
+            solicitante: os.mecanico, criadoEm: agoraFormatado()
+          });
+
+          await gravarLogNoGoogleDrive('retirada', {
+            id_os: os.id,
+            equipamento: os.frota,
+            frota: catInfo ? catInfo.categoria : 'EQUIPAMENTO MINA',
+            servico: `${servico} (Peças: ${pecas} | Horímetro: ${horimetro}h)`,
+            mecanico: os.mecanico,
+            usuario: estado.usuarioAtual ? estado.usuarioAtual.nome : os.mecanico,
+            imagem_base64: fotoBase64
+          });
+
+          btn.disabled = false; btn.textContent = '✓ Finalizar & Salvar no Drive';
+          const m = document.getElementById('modal-finalizar-os'); m.classList.add('hidden'); m.classList.remove('flex');
+          renderizarTudo();
+        });
+
+        document.getElementById('form-simulador-xlsm-entrada')?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const frota = document.getElementById('xlsm-nova-frota').value;
+          const comentario = document.getElementById('xlsm-novo-comentario').value.trim().toUpperCase();
+          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === frota) || { categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 15000 };
+          planilhaXlsmRows.unshift({
+            rowId: `ROW-${Math.floor(10 + Math.random() * 89)}`, frota, categoria: catInfo.categoria,
+            inicio: agoraFormatado(), fim: '', duracaoMin: 15.0,
+            especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA', matricula: '1328',
+            executante: 'Clecio Ribeiro dos Santos', horimetro: catInfo.horimetro, tipo: 'Corretiva', local: catInfo.local, comentario
+          });
+          document.getElementById('xlsm-novo-comentario').value = '';
+          renderizarTudo();
+        });
+
+        document.getElementById('btn-varredura-agora')?.addEventListener('click', () => executarVarreduraPlanilha(true));
+        document.getElementById('btn-fechar-modal-hist')?.addEventListener('click', () => { document.getElementById('modal-historico').classList.add('hidden'); document.getElementById('modal-historico').classList.remove('flex'); });
+        document.getElementById('btn-rodape-fechar-hist')?.addEventListener('click', () => { document.getElementById('modal-historico').classList.add('hidden'); document.getElementById('modal-historico').classList.remove('flex'); });
+        document.getElementById('btn-fechar-modal-fin')?.addEventListener('click', () => { document.getElementById('modal-finalizar-os').classList.add('hidden'); document.getElementById('modal-finalizar-os').classList.remove('flex'); });
+        document.getElementById('btn-cancelar-modal-fin')?.addEventListener('click', () => { document.getElementById('modal-finalizar-os').classList.add('hidden'); document.getElementById('modal-finalizar-os').classList.remove('flex'); });
+        document.getElementById('btn-fechar-modal-foto')?.addEventListener('click', () => { document.getElementById('modal-foto').classList.add('hidden'); document.getElementById('modal-foto').classList.remove('flex'); });
+      }
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', inicializar);
+      else inicializar();
+    })();
   </script>
 </body>
 </html>
