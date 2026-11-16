@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Controle de Manutenção - Frota</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 16px; }
+    .container { max-width: 1100px; margin: auto; }
+    h1 { font-size: 1.3rem; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155; }
+    label { display: block; font-size: 0.85rem; margin-top: 10px; color: #94a3b8; }
+    input, select { width: 100%; padding: 10px; margin-top: 4px; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; }
+    button { margin-top: 15px; width: 100%; padding: 12px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.95rem; }
+    .btn-entrada { background: #dc2626; color: white; }
+    .btn-retirada { background: #16a34a; color: white; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid #334155; font-size: 0.85rem; }
+    th { color: #94a3b8; }
+    .badge { background: #dc2626; padding: 3px 8px; border-radius: 12px; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Gestão de Manutenção — Ativos: <span id="total-manutencao" class="badge">0</span></h1>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Registrar Entrada em Manutenção</h3>
+        <label>ID OS</label><input id="ent-os" placeholder="Ex: OS-2026-010" />
+        <label>Equipamento (Tag)</label><input id="ent-equip" placeholder="Ex: PF-01" />
+        <label>Frota</label><input id="ent-frota" placeholder="Ex: Perfuratriz" />
+        <label>Motivo / Falha</label><input id="ent-motivo" placeholder="Ex: Vazamento hidráulico" />
+        <label>Prioridade</label>
+        <select id="ent-prio"><option>Alta</option><option>Média</option><option>Baixa</option></select>
+        <label>Usuário</label><input id="ent-user" placeholder="Nome do controlador" />
+        <label>Foto da Falha / Equipamento</label>
+        <input type="file" id="ent-foto" accept="image/*" capture="environment" />
+        <button class="btn-entrada" id="btn-ent" onclick="enviarEntrada()">Salvar Log de Entrada</button>
+      </div>
+
+      <div class="card">
+        <h3>Registrar Retirada / Liberação</h3>
+        <label>ID OS</label><input id="ret-os" placeholder="Ex: OS-2026-010" />
+        <label>Equipamento (Tag)</label><input id="ret-equip" placeholder="Ex: PF-01" />
+        <label>Frota</label><input id="ret-frota" placeholder="Ex: Perfuratriz" />
+        <label>Serviço Executado</label><input id="ret-serv" placeholder="Ex: Troca de mangueira" />
+        <label>Mecânico Responsável</label><input id="ret-mec" placeholder="Nome do mecânico" />
+        <label>Liberado Por</label><input id="ret-user" placeholder="Nome do encarregado" />
+        <label>Foto da Liberação</label>
+        <input type="file" id="ret-foto" accept="image/*" capture="environment" />
+        <button class="btn-retirada" id="btn-ret" onclick="enviarRetirada()">Salvar Log de Retirada</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Equipamentos em Manutenção</h3>
+      <table>
+        <thead>
+          <tr><th>Equipamento</th><th>Início</th><th>Motivo</th><th>Mecânico</th></tr>
+        </thead>
+        <tbody id="tabela-manutencao">
+          <tr><td colspan="4">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function lerImagemBase64(input) {
+      return new Promise((resolve) => {
+        const file = input.files[0];
+        if (!file) return resolve("");
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function carregarManutencao() {
+      try {
+        const res = await fetch("/api/em-manutencao");
+        const data = await res.json();
+        document.getElementById("total-manutencao").textContent = data.total || 0;
+
+        const tbody = document.getElementById("tabela-manutencao");
+        if (!data.equipamentos || data.equipamentos.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='4'>Nenhum equipamento em manutenção.</td></tr>";
+          return;
+        }
+
+        tbody.innerHTML = data.equipamentos.map(eq => `
+          <tr>
+            <td><strong>${eq.equipamento}</strong></td>
+            <td>${eq.inicio}</td>
+            <td>${eq.motivo}</td>
+            <td>${eq.mecanico}</td>
+          </tr>
+        `).join("");
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function enviarEntrada() {
+      const btn = document.getElementById("btn-ent");
+      btn.disabled = true; btn.textContent = "Enviando...";
+      const foto = await lerImagemBase64(document.getElementById("ent-foto"));
+
+      const payload = {
+        id_os: document.getElementById("ent-os").value,
+        equipamento: document.getElementById("ent-equip").value,
+        frota: document.getElementById("ent-frota").value,
+        motivo: document.getElementById("ent-motivo").value,
+        prioridade: document.getElementById("ent-prio").value,
+        usuario: document.getElementById("ent-user").value,
+        imagem_base64: foto
+      };
+      const res = await fetch("/api/log/entrada", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      btn.disabled = false; btn.textContent = "Salvar Log de Entrada";
+      if (res.ok) alert("Log de ENTRADA e foto salvos no Google Drive!");
+    }
+
+    async function enviarRetirada() {
+      const btn = document.getElementById("btn-ret");
+      btn.disabled = true; btn.textContent = "Enviando...";
+      const foto = await lerImagemBase64(document.getElementById("ret-foto"));
+
+      const payload = {
+        id_os: document.getElementById("ret-os").value,
+        equipamento: document.getElementById("ret-equip").value,
+        frota: document.getElementById("ret-frota").value,
+        servico: document.getElementById("ret-serv").value,
+        mecanico: document.getElementById("ret-mec").value,
+        usuario: document.getElementById("ret-user").value,
+        imagem_base64: foto
+      };
+      const res = await fetch("/api/log/retirada", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      btn.disabled = false; btn.textContent = "Salvar Log de Retirada";
+      if (res.ok) alert("Log de RETIRADA e foto salvos no Google Drive!");
+    }
+
+    carregarManutencao();
+    setInterval(carregarManutencao, 600000);
+  </script>
+</body>
+</html>
