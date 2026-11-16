@@ -2,7 +2,7 @@ import io
 import os
 import time
 import html
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import requests
 import openpyxl
 from flask import Flask, request, jsonify, send_file
@@ -41,11 +41,16 @@ def _formatar_data(valor):
     return str(valor or "").strip()
 
 
+def _agora_local():
+    # Planilha em horário de Belém (UTC-3); o servidor (ex.: Render) roda em UTC
+    return datetime.now(timezone(timedelta(hours=-3))).replace(tzinfo=None)
+
+
 def _calcular_duracao_minutos(inicio_val):
     dt_inicio = _parse_data_excel(inicio_val)
     if not dt_inicio:
         return 0.0
-    diff = (datetime.now() - dt_inicio).total_seconds() / 60.0
+    diff = (_agora_local() - dt_inicio).total_seconds() / 60.0
     return round(max(diff, 0.0), 2)
 
 
@@ -103,11 +108,14 @@ def _ler_planilha_drive(forcar=False):
         if idx_comentario is None:
             idx_comentario = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("FALHA", "MOTIVO", "DESCR"))), None)
         idx_esp = next((i for i, h in enumerate(cabecalhos) if "ESPEC" in h), None)
-        idx_mec = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("EXECUT", "MECANIC", "MECÂNIC"))), None)
-        idx_mat = next((i for i, h in enumerate(cabecalhos) if "MATRIC" in h or "MATRÍC" in h), None)
+        if idx_esp is None:
+            idx_esp = next((i for i, h in enumerate(cabecalhos) if h == "DESCRICAO" or h == "DESCRIÇÃO"), None)
+        idx_mec = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("EXECUT", "MECANIC", "MECÂNIC", "NOME_OPERADOR"))), None)
+        idx_mat = next((i for i, h in enumerate(cabecalhos) if "MATRIC" in h or "MATRÍC" in h or h == "OPERADOR"), None)
         idx_hor = next((i for i, h in enumerate(cabecalhos) if "HORIM" in h or "HORÍM" in h), None)
-        idx_tipo = next((i for i, h in enumerate(cabecalhos) if "TIPO" in h), None)
-        idx_cat = next((i for i, h in enumerate(cabecalhos) if "CATEG" in h or "LOCAL" in h or "FROTA_DESC" in h), None)
+        idx_tipo = next((i for i, h in enumerate(cabecalhos) if "TIPO" in h or h == "ESTADO"), None)
+        idx_cat = next((i for i, h in enumerate(cabecalhos) if "CATEG" in h or "GRUPO" in h or "FROTA_DESC" in h), None)
+        idx_local = next((i for i, h in enumerate(cabecalhos) if h == "LOCAL"), None)
         idx_dur = next((i for i, h in enumerate(cabecalhos) if "DURAC" in h or "DURAÇ" in h or "MINUT" in h), None)
 
         for row in ws.iter_rows(min_row=linha_cabecalho + 1, values_only=True):
@@ -132,6 +140,7 @@ def _ler_planilha_drive(forcar=False):
             hor_val = row[idx_hor] if idx_hor is not None and idx_hor < len(row) else None
             tipo_val = row[idx_tipo] if idx_tipo is not None and idx_tipo < len(row) else None
             cat_val = row[idx_cat] if idx_cat is not None and idx_cat < len(row) else None
+            local_val = row[idx_local] if idx_local is not None and idx_local < len(row) else None
             dur_val = row[idx_dur] if idx_dur is not None and idx_dur < len(row) else None
 
             try:
@@ -149,7 +158,8 @@ def _ler_planilha_drive(forcar=False):
                 "mecanico": str(mec_val).strip() if mec_val not in (None, "") else "-",
                 "matricula": str(mat_val).strip() if mat_val not in (None, "") else "-",
                 "horimetro": str(hor_val).strip() if hor_val not in (None, "") else "-",
-                "tipo": str(tipo_val).strip() if tipo_val not in (None, "") else "Corretiva",
+                "tipo": str(tipo_val).strip().capitalize() if tipo_val not in (None, "") else "Corretiva",
+                "local": str(local_val).strip() if local_val not in (None, "") else "",
                 "motivo": str(comentario_val).strip() if comentario_val not in (None, "") else "SEM COMENTÁRIO"
             }
 
@@ -163,7 +173,11 @@ def _ler_planilha_drive(forcar=False):
     resultado = {
         "total": len(em_manutencao),
         "equipamentos": em_manutencao,
-        "encerrados_recentes": encerrados_recentes[-50:]
+        "encerrados_recentes": sorted(
+            encerrados_recentes,
+            key=lambda i: _parse_data_excel(i["fim"]) or datetime.min,
+            reverse=True
+        )[:50]
     }
     _CACHE_PLANILHA["timestamp"] = agora
     _CACHE_PLANILHA["dados"] = resultado
