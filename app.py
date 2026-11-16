@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import time
 import html
 from datetime import datetime, timedelta, timezone
@@ -10,7 +11,14 @@ from flask import Flask, request, jsonify, send_file
 # static_folder=None impede exposição de app.py, .env ou outros arquivos da raiz
 app = Flask(__name__, static_folder=None)
 
-PUBLIC_FILE_ID = os.environ.get("PUBLIC_FILE_ID", "").strip()
+def _limpar_id(valor):
+    """Aceita o ID puro ou o link inteiro do Drive e devolve só o ID."""
+    valor = (valor or "").strip().strip('"').strip("'")
+    m = re.search(r"/d/([A-Za-z0-9_-]{10,})", valor) or re.search(r"[?&]id=([A-Za-z0-9_-]{10,})", valor)
+    return m.group(1) if m else valor
+
+
+PUBLIC_FILE_ID = _limpar_id(os.environ.get("PUBLIC_FILE_ID", ""))
 APPS_SCRIPT_URL = os.environ.get("APPS_SCRIPT_URL", "").strip()
 URL_DOWNLOAD_PUBLICO = f"https://drive.google.com/uc?export=download&confirm=t&id={PUBLIC_FILE_ID}"
 
@@ -76,11 +84,27 @@ def _ler_planilha_drive(forcar=False):
         return _CACHE_PLANILHA["dados"]
 
     resposta = requests.get(URL_DOWNLOAD_PUBLICO, timeout=25)
+    if resposta.status_code in (403, 404):
+        raise RuntimeError(
+            f"O Drive respondeu HTTP {resposta.status_code}. Confira se o ID do arquivo está certo "
+            "e se o compartilhamento é 'Qualquer pessoa com o link'."
+        )
     resposta.raise_for_status()
-    wb = openpyxl.load_workbook(io.BytesIO(resposta.content), data_only=True, read_only=True)
+    if not resposta.content.startswith(b"PK"):
+        trecho = re.sub(r"\s+", " ", resposta.text[:150]) if resposta.content else "(vazio)"
+        raise RuntimeError(
+            "O Drive não devolveu uma planilha .xlsx/.xlsm (veio uma página). "
+            "Se o arquivo for uma Planilha Google, exporte como .xlsx e use o ID do .xlsx. "
+            f"Trecho recebido: {trecho}"
+        )
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(resposta.content), data_only=True, read_only=True)
+    except Exception as e:
+        raise RuntimeError(f"Arquivo baixado, mas não foi possível abrir como planilha: {e}")
 
     em_manutencao = []
     encerrados_recentes = []
+    abas_lidas = 0
 
     for nome_aba in wb.sheetnames:
         ws = wb[nome_aba]
@@ -99,6 +123,7 @@ def _ler_planilha_drive(forcar=False):
 
         if not linha_cabecalho:
             continue
+        abas_lidas += 1
 
         idx_equip = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("FROTA", "EQUIP", "TAG", "NOME"))), 0)
         idx_inicio = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("INICIO", "INÍCIO"))), None)
@@ -170,6 +195,10 @@ def _ler_planilha_drive(forcar=False):
 
     wb.close()
 
+    if abas_lidas == 0:
+        raise RuntimeError(
+            "Nenhuma aba tem as colunas esperadas (equipamento/frota, hora_inicio e hora_fim) nas primeiras 12 linhas."
+        )
     resultado = {
         "total": len(em_manutencao),
         "equipamentos": em_manutencao,
@@ -241,6 +270,14 @@ def log_entrada():
 
 
 @app.route("/api/log/retirada", methods=["POST"])
+def log_retirada():
+    return _enviar_para_apps_script("retirada", request.json)
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+ods=["POST"])
 def log_retirada():
     return _enviar_para_apps_script("retirada", request.json)
 
