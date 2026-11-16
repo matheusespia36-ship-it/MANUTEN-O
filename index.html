@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Painel de Manutenção & OS (QHA) • Fagundes Construção e Mineração</title>
 
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS v3.4.16 fixo -->
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
 
-  <!-- Tone.js para Sirene Industrial LFO -->
+  <!-- Tone.js v14.8.49 fixo -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 
   <!-- Fontes Oficiais: Inter & JetBrains Mono -->
@@ -24,18 +24,6 @@
           fontFamily: {
             sans: ['Inter', 'sans-serif'],
             mono: ['JetBrains Mono', 'monospace'],
-          },
-          colors: {
-            fg: {
-              base: '#090c12',
-              surface: '#10151e',
-              elevated: '#161d29',
-              border: '#232d3d',
-              blue: '#00379e',
-              blueHover: '#0047cc',
-              gray: '#98989a',
-              green: '#95d324',
-            }
           }
         }
       }
@@ -152,28 +140,11 @@
       border-left-width: 5px;
       animation: pulso-corporativo 2s infinite ease-in-out;
     }
-
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #090c12;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #232d3d;
-      border-radius: 9999px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #00379e;
-    }
   </style>
 </head>
 <body class="min-h-screen flex flex-col selection:bg-[#00379e] selection:text-white">
 
-  <!-- ===================================================================== -->
-  <!-- 1. TELA DE LOGIN CORPORATIVA                                          -->
-  <!-- ===================================================================== -->
+  <!-- 1. TELA DE LOGIN CORPORATIVA -->
   <div id="tela-login" class="min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-lg corp-card rounded-2xl overflow-hidden border-t-4 border-t-[#00379e]">
       <div class="bg-[#131924] px-7 py-6 border-b border-[#232d3d]">
@@ -192,7 +163,7 @@
             PAINEL DE MANUTENÇÃO &amp; OS <span class="text-[#95d324]">(QHA)</span>
           </h1>
           <p class="text-xs text-[#98989a] mt-1 flex items-center gap-1.5">
-            <span>Sincronização automática (10 min):</span>
+            <span>Sincronização automática (2 min):</span>
             <code class="bg-[#090c12] text-[#95d324] border border-[#232d3d] px-2 py-0.5 rounded font-mono-tech text-[11px]">manuntecao.xlsm • Google Drive</code>
           </p>
         </div>
@@ -201,7 +172,7 @@
       <form id="form-login" class="p-7 space-y-4">
         <div id="erro-login" class="hidden bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs font-medium px-3.5 py-2.5 rounded-lg flex items-center gap-2">
           <span class="font-bold text-rose-400">!</span>
-          <span id="erro-login-texto">Usuário ou senha inválidos.</span>
+          <span>Usuário ou senha inválidos.</span>
         </div>
 
         <div>
@@ -244,11 +215,7 @@
             Acesso por Perfil Operacional
           </p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              data-quick-user="encarregado"
-              class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#00379e] p-2.5 rounded-xl text-left transition cursor-pointer"
-            >
+            <button type="button" data-quick-user="encarregado" class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#00379e] p-2.5 rounded-xl text-left transition cursor-pointer">
               <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-[#60a5fa] shrink-0">ENC</span>
               <div class="min-w-0">
                 <div class="text-xs font-bold text-white truncate">Encarregado</div>
@@ -256,15 +223,171 @@
               </div>
             </button>
 
-            <button
-              type="button"
-              data-quick-user="clecio"
-              class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#95d324] p-2.5 rounded-xl text-left transition cursor-pointer"
-            >
+            <button type="button" data-quick-user="clecio" class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#95d324] p-2.5 rounded-xl text-left transition cursor-pointer">
               <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-[#95d324] shrink-0">MEC</span>
               <div class="min-w-0">
                 <div class="text-xs font-bold text-white truncate">Clecio (Mat. 1328)</div>
                 <div class="text-[10px] text-[#98989a] truncate">QHA + Minhas OS</div>
+              </div>
+            </button>
+
+            <button type="button" data-quick-user="controlador" class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#00379e] p-2.5 rounded-xl text-left transition cursor-pointer">
+              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">CCO</span>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-white truncate">Controlador (CCO)</div>
+                <div class="text-[10px] text-[#98989a] truncate">Fila Pendências xlsm</div>
+              </div>
+            </button>
+
+            <button type="button" data-quick-user="admin" class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#95d324] p-2.5 rounded-xl text-left transition cursor-pointer">
+              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-purple-400 shrink-0">ADM</span>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-white truncate">Administrador</div>
+                <div class="text-[10px] text-[#98989a] truncate">Acesso Total + Acessos</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. SISTEMA PRINCIPAL CORPORATIVO -->
+  <div id="tela-sistema" class="hidden flex-1 flex flex-col">
+
+    <!-- Cabeçalho Superior -->
+    <header class="bg-[#10151e] border-b border-[#232d3d] sticky top-0 z-30">
+      <div class="h-1 w-full bg-[#00379e]"></div>
+      <div class="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3.5">
+          <svg class="h-9 w-auto shrink-0" viewBox="0 0 185 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fagundes">
+            <rect x="0" y="2" width="44" height="44" rx="7" fill="#00379e"/>
+            <path d="M12 12H33V18H19V22H30.5V27.5H19V36H12V12Z" fill="#ffffff"/>
+            <polygon points="28.5,29.5 35.5,29.5 32,36 25,36" fill="#95d324"/>
+            <text x="54" y="25" fill="#ffffff" font-family="Inter, sans-serif" font-weight="800" font-size="18" letter-spacing="1.2">FAGUNDES</text>
+            <text x="55" y="37" fill="#98989a" font-family="Inter, sans-serif" font-weight="600" font-size="7.5" letter-spacing="1.3">CONSTRUÇÃO E MINERAÇÃO</text>
+          </svg>
+
+          <div class="hidden sm:block h-8 w-px bg-[#232d3d]"></div>
+
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 class="text-sm sm:text-base font-extrabold tracking-tight text-white">
+                PAINEL DE MANUTENÇÃO &amp; OS <span class="text-[#95d324]">(QHA)</span>
+              </h1>
+              <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-[#090c12] text-neutral-300 border border-[#232d3d] px-2.5 py-0.5 rounded">
+                <span id="indicador-conexao-dot" class="w-1.5 h-1.5 rounded-full bg-[#95d324] animate-pulse"></span>
+                manuntecao.xlsm • Varredura 2m (<span id="header-timer-sync" class="font-mono-tech text-[#95d324]">02:00</span>)
+              </span>
+            </div>
+            <p class="text-[11px] text-[#98989a] mt-0.5">
+              Controle de Manutenção, Ordens de Serviço e Logs no Google Drive
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-2 bg-[#090c12] border border-[#232d3d] px-3 py-1.5 rounded-lg">
+            <div id="header-avatar-sigla" class="w-7 h-7 rounded bg-[#00379e] flex items-center justify-center text-xs font-bold text-white">OP</div>
+            <div>
+              <div id="header-nome-usuario" class="text-xs font-bold text-white leading-tight">Usuário</div>
+              <div id="header-badge-perfil" class="text-[10px] font-mono-tech uppercase text-[#95d324] leading-tight">PERFIL</div>
+            </div>
+          </div>
+
+          <button type="button" id="btn-sair-login" class="bg-[#161d29] hover:bg-[#00379e] border border-[#232d3d] hover:border-[#00379e] text-neutral-200 hover:text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition cursor-pointer">
+            Sair / Trocar Perfil
+          </button>
+        </div>
+      </div>
+
+      <!-- Barra de Abas -->
+      <nav id="barra-abas" class="max-w-[1600px] mx-auto px-4 flex flex-wrap items-center gap-1.5 border-t border-[#1b2330] py-2"></nav>
+    </header>
+
+    <!-- Banner Corporativo de Liberação Automática -->
+    <div id="banner-alerta-saida" class="hidden max-w-[1600px] w-full mx-auto px-4 pt-4">
+      <div class="banner-liberacao-corp text-white rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-lg bg-[#95d324]/15 border border-[#95d324]/50 text-[#95d324] flex items-center justify-center font-bold text-base shrink-0">✓</div>
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-[#95d324]">
+              Baixa Sincronizada • Horário "Fim" Confirmado em manuntecao.xlsm
+            </div>
+            <div id="banner-alerta-titulo" class="text-base font-bold text-white mt-0.5">
+              EQUIPAMENTO LIBERADO DO QHA E EXCLUÍDO DA FILA
+            </div>
+            <div id="banner-alerta-detalhe" class="text-xs text-neutral-300 mt-0.5"></div>
+          </div>
+        </div>
+        <button type="button" id="btn-fechar-banner" class="bg-[#161d29] hover:bg-[#1f293a] text-neutral-200 text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-lg border border-[#232d3d] transition cursor-pointer shrink-0">
+          Ciente • Fechar
+        </button>
+      </div>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 space-y-5">
+
+      <!-- ABA 1: QUADRO DE MANUTENÇÕES (QHA) -->
+      <section id="aba-quadro" class="hidden space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="corp-card rounded-xl p-4 border-l-4 border-l-[#00379e] flex items-center justify-between">
+            <div>
+              <span class="text-[11px] font-bold uppercase tracking-wider text-[#98989a]">Equipamentos em Manutenção (Sem Horário Fim)</span>
+              <div class="mt-1.5 flex items-baseline gap-3">
+                <span id="kpi-total-manutencao" class="text-3xl font-extrabold text-white font-mono-tech">0</span>
+                <span class="text-xs text-[#98989a]">unidades ativas no QHA</span>
+              </div>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-[#00379e]/20 border border-[#00379e]/50 flex items-center justify-center text-xl">🚜</div>
+          </div>
+
+          <div class="corp-card rounded-xl p-4 border-l-4 border-l-[#95d324] flex items-center justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-[#95d324] animate-pulse"></span>
+                <span id="status-drive-label" class="text-[11px] font-bold uppercase tracking-wider text-[#95d324]">Integração Google Drive • Conectada</span>
+              </div>
+              <div class="mt-1.5 flex items-baseline gap-2 flex-wrap">
+                <span class="text-base font-bold text-white font-mono-tech">manuntecao.xlsm</span>
+                <span class="text-xs text-[#98989a]">• Última leitura: <strong id="kpi-ultima-atualizacao" class="text-white font-mono-tech">--:--:--</strong></span>
+              </div>
+            </div>
+            <button type="button" id="btn-sincronizar-planilha-real" class="px-3 py-2 rounded-lg bg-[#161d29] hover:bg-[#00379e] border border-[#232d3d] text-xs font-bold text-white cursor-pointer transition shrink-0">
+              ↻ Atualizar Agora
+            </button>
+          </div>
+        </div>
+
+        <div class="corp-card rounded-xl p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div id="qha-category-pills" class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+            <button type="button" data-qha-cat="TODAS" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-[#00379e] text-white transition whitespace-nowrap cursor-pointer">Todas as Categorias</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO MINA" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Mina</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO DRYSTACK" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Drystack</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO ALIMENTACAO" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Alimentação</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO INFRA" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Infraestrutura</button>
+            <button type="button" data-qha-cat="EQUIPAMENTO AUXILIAR" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">Auxiliar</button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <div class="relative flex-1 sm:w-72">
+              <input
+                type="text"
+                id="qha-busca-texto"
+                placeholder="Buscar frota, especialidade ou comentário..."
+                class="w-full bg-[#090c12] border border-[#232d3d] focus:border-[#00379e] focus:outline-none rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-neutral-500"
+              />
+              <span class="absolute left-2.5 top-2 text-xs text-[#98989a]">🔍</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="corp-card rounded-xl overflow-hidden">
+          <div class="bg-[#161d29] px-4 py-2.5 border-b border-[#232d3d] flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-extrabold uppercase tracking-wider text-white">Quadro de Manutenções Ativas (QHA)</span>
+              <span id="qha-contador text-[#98989a] truncate">QHA + Minhas OS</div>
               </div>
             </button>
 
