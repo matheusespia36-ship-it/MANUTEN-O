@@ -30,11 +30,27 @@ Painel web de controle de manutenção de equipamentos (QHA), Ordens de Serviço
 5. Build command: `pip install -r requirements.txt`
 6. Start command: `gunicorn app:app`
 
-## Usuários do sistema
+## Usuários e acessos
 
-| Login | Senha | Perfil |
+Existe apenas um acesso inicial:
+
+| Login | Senha inicial | Perfil |
 |---|---|---|
-| `encarregado` | `123` | Abre OS e vê QHA |
-| `clecio` | `123` | Mecânico — vê suas OS |
-| `controlador` | `123` | CCO — vê QHA + fila de pendências |
-| `admin` | `123` | Acesso total |
+| `admin` | `123` | Administrador (acesso total) |
+
+Entre com ele, abra a aba **Gestão de Acessos** e crie os demais usuários
+(Encarregado, Mecânico, Controlador CCO ou outro Administrador). Dá para editar,
+redefinir senha, bloquear/ativar e excluir. O painel avisa para trocar a senha
+inicial (botão **Minha Senha**).
+
+As senhas ficam criptografadas no servidor (nunca no HTML). Os mecânicos cadastrados
+aparecem sozinhos na lista "Mecânico Destinado" ao abrir uma OS.
+
+### Para os usuários não sumirem quando o Render reinicia
+
+O disco do Render grátis é apagado a cada reinício. Para guardar os usuários no Google Drive:
+
+1. No `codigo_google_apps_script.js`, troque o valor de `USERS_SYNC_TOKEN` por um texto secreto longo e reimplante o script.
+2. No Render, crie a variável `USERS_SYNC_TOKEN` com **o mesmo texto** (e mantenha `APPS_SCRIPT_URL`).
+
+Variáveis extras (opcionais): `SECRET_KEY` (o `render.yaml` já gera uma), `USERS_FILE` (caminho do arquivo local de usuários).

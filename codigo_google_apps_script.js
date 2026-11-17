@@ -11,13 +11,50 @@
  * 7. Executar como: "Eu"
  * 8. Quem pode acessar: "Qualquer pessoa" (mesmo anônima)
  * 9. Copie a URL gerada (terminada em /exec) e configure no APPS_SCRIPT_URL
+ *
+ * USUÁRIOS (Gestão de Acessos): para os acessos criados pelo administrador não
+ * se perderem quando o Render reinicia, defina abaixo o mesmo valor que você
+ * colocar na variável USERS_SYNC_TOKEN do Render (qualquer texto longo e secreto).
  */
+var USERS_SYNC_TOKEN = "TROQUE-POR-UM-TEXTO-SECRETO-LONGO";
+
+function _json(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function _abaUsuarios() {
+  var pastas = DriveApp.getFoldersByName("Logs_Manutencao");
+  var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder("Logs_Manutencao");
+  var arquivos = pasta.getFilesByName("Usuarios_Painel_QHA");
+  var ss;
+  if (arquivos.hasNext()) {
+    ss = SpreadsheetApp.open(arquivos.next());
+  } else {
+    ss = SpreadsheetApp.create("Usuarios_Painel_QHA");
+    DriveApp.getFileById(ss.getId()).moveTo(pasta);
+  }
+  return ss.getSheets()[0];
+}
 
 function doPost(e) {
   try {
     var rawData = e.postData.contents;
     var dados = JSON.parse(rawData);
     var tipo = dados.tipo || "registro";
+
+    // Persistência dos usuários (guarda o JSON na célula A1; só guarda hashes de senha)
+    if (tipo === "usuarios_carregar" || tipo === "usuarios_salvar") {
+      if (!USERS_SYNC_TOKEN || USERS_SYNC_TOKEN.indexOf("TROQUE") === 0 || dados.token !== USERS_SYNC_TOKEN) {
+        return _json({ status: "erro", mensagem: "Token inválido" });
+      }
+      var abaUsers = _abaUsuarios();
+      if (tipo === "usuarios_salvar") {
+        abaUsers.getRange("A1").setValue(JSON.stringify(dados.usuarios || {}));
+        return _json({ status: "sucesso" });
+      }
+      var bruto = abaUsers.getRange("A1").getValue();
+      return _json({ status: "sucesso", usuarios: bruto ? JSON.parse(bruto) : {} });
+    }
     
     // Obter ou criar a pasta Logs_Manutencao
     var pastas = DriveApp.getFoldersByName("Logs_Manutencao");

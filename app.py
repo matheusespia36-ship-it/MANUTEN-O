@@ -1,13 +1,18 @@
 import io
+import json
 import os
 import re
+import secrets
+import threading
 import time
+from functools import wraps
 from datetime import datetime, timedelta, timezone
 import requests
 import openpyxl
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, session
+from werkzeug.security import generate_password_hash, check_password_hash
 
-app = Flask(__name__, static_folder=".")
+app = Flask(__name__, static_folder=None)
 
 
 def _limpar_id(valor):
@@ -19,6 +24,39 @@ def _limpar_id(valor):
 PUBLIC_FILE_ID = _limpar_id(os.environ.get("PUBLIC_FILE_ID", ""))
 APPS_SCRIPT_URL = os.environ.get("APPS_SCRIPT_URL", "").strip()
 LOCAL_XLSM_PATH = os.environ.get("LOCAL_XLSM_PATH", "/sdcard/Download/manuntecao.xlsm").strip()
+
+USERS_FILE = os.environ.get("USERS_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "usuarios.json"))
+USERS_SYNC_TOKEN = os.environ.get("USERS_SYNC_TOKEN", "").strip()
+
+
+def _secret_key():
+    chave = os.environ.get("SECRET_KEY", "").strip()
+    if chave:
+        return chave
+    caminho = USERS_FILE + ".secret"
+    try:
+        with open(caminho, "r", encoding="utf-8") as f:
+            valor = f.read().strip()
+            if valor:
+                return valor
+    except OSError:
+        pass
+    valor = secrets.token_hex(32)
+    try:
+        with open(caminho, "w", encoding="utf-8") as f:
+            f.write(valor)
+    except OSError:
+        pass
+    return valor
+
+
+app.secret_key = _secret_key()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(os.environ.get("RENDER")),
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+)
 
 _CACHE_PLANILHA = {
     "timestamp": 0.0,
@@ -258,12 +296,366 @@ def _obter_dados_planilha(forcar=False):
     return resultado, historico_por_frota
 
 
+# =============================================================================
+# USUÁRIOS E ACESSOS
+# =============================================================================
+PERFIS = {
+    "ENCARREGADO": ["quadro", "os"],
+    "MECANICO": ["quadro", "minhas-os"],
+    "CONTROLADOR": ["quadro", "pendencias"],
+    "ADMINISTRADOR": ["quadro", "os", "minhas-os", "pendencias", "acessos"],
+}
+LOGIN_RE = re.compile(r"^[a-z0-9._-]{3,30}$")
+SENHA_MIN = 3  # senha inicial do admin é "123"; o admin pode exigir mais ao criar usuários
+
+_users_lock = threading.RLock()
+_users_cache = {"carregado": False, "usuarios": {}}
+_tentativas = {}  # chave -> (falhas, bloqueado_ate)
+
+
+def _agora_iso():
+    return _agora_local().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _admin_padrao():
+    return {
+        "login": "admin",
+        "nome": "Administrador Geral",
+        "matricula": "0001",
+        "perfil": "ADMINISTRADOR",
+        "senha_hash": generate_password_hash("123"),
+        "ativo": True,
+        "trocar_senha": True,  # senha inicial: avisa para trocar
+        "criado_em": _agora_iso(),
+        "ultimo_acesso": "",
+    }
+
+
+def _ler_arquivo_usuarios():
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        return dados if isinstance(dados, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _apps_script_usuarios(acao, payload=None):
+    if not APPS_SCRIPT_URL:
+        return None
+    corpo = {"tipo": acao, "token": USERS_SYNC_TOKEN}
+    if payload is not None:
+        corpo["usuarios"] = payload
+    try:
+        res = requests.post(APPS_SCRIPT_URL, json=corpo, timeout=25)
+        data = res.json()
+        if data.get("status") == "sucesso":
+            return data
+    except Exception as e:
+        print(f"Aviso: sincronização de usuários com Apps Script falhou: {e}")
+    return None
+
+
+def _carregar_usuarios():
+    """Lê usuários do Apps Script (persistente no Render grátis) ou do arquivo local."""
+    with _users_lock:
+        if _users_cache["carregado"]:
+            return _users_cache["usuarios"]
+        usuarios = None
+        remoto = _apps_script_usuarios("usuarios_carregar")
+        if remoto and isinstance(remoto.get("usuarios"), dict) and remoto["usuarios"]:
+            usuarios = remoto["usuarios"]
+        if not usuarios:
+            usuarios = _ler_arquivo_usuarios()
+        if not usuarios:
+            usuarios = {"admin": _admin_padrao()}
+            _persistir_usuarios(usuarios)
+        _users_cache["usuarios"] = usuarios
+        _users_cache["carregado"] = True
+        return usuarios
+
+
+def _persistir_usuarios(usuarios, remoto=True):
+    try:
+        tmp = USERS_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(usuarios, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, USERS_FILE)
+    except OSError as e:
+        print(f"Aviso: não foi possível gravar {USERS_FILE}: {e}")
+    if remoto:
+        _apps_script_usuarios("usuarios_salvar", usuarios)
+
+
+def _usuario_publico(u):
+    return {
+        "login": u["login"],
+        "nome": u["nome"],
+        "matricula": u.get("matricula", ""),
+        "perfil": u["perfil"],
+        "abas": PERFIS.get(u["perfil"], ["quadro"]),
+        "ativo": bool(u.get("ativo", True)),
+        "trocarSenha": bool(u.get("trocar_senha", False)),
+        "criadoEm": u.get("criado_em", ""),
+        "ultimoAcesso": u.get("ultimo_acesso", ""),
+    }
+
+
+def _usuario_logado():
+    login = session.get("login")
+    if not login:
+        return None
+    u = _carregar_usuarios().get(login)
+    if not u or not u.get("ativo", True):
+        session.clear()
+        return None
+    return u
+
+
+def exigir_login(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not _usuario_logado():
+            return jsonify({"erro": "Sessão expirada. Entre novamente."}), 401
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def exigir_admin(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        u = _usuario_logado()
+        if not u:
+            return jsonify({"erro": "Sessão expirada. Entre novamente."}), 401
+        if u["perfil"] != "ADMINISTRADOR":
+            return jsonify({"erro": "Apenas o administrador pode fazer isso."}), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def _qtd_admins_ativos(usuarios, ignorar=None):
+    return sum(
+        1 for l, u in usuarios.items()
+        if l != ignorar and u["perfil"] == "ADMINISTRADOR" and u.get("ativo", True)
+    )
+
+
+def _validar_senha(senha):
+    if not isinstance(senha, str) or len(senha) < SENHA_MIN:
+        return f"A senha precisa ter pelo menos {SENHA_MIN} caracteres."
+    return None
+
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    dados = request.get_json(silent=True) or {}
+    login = str(dados.get("login", "")).strip().lower()
+    senha = str(dados.get("senha", ""))
+    chave = f"{request.remote_addr}|{login}"
+    falhas, ate = _tentativas.get(chave, (0, 0))
+    if ate > time.time():
+        restante = int(ate - time.time()) // 60 + 1
+        return jsonify({"erro": f"Muitas tentativas. Aguarde {restante} min e tente de novo."}), 429
+
+    usuarios = _carregar_usuarios()
+    u = usuarios.get(login)
+    # check_password_hash também roda quando o usuário não existe, para não revelar quem existe pelo tempo de resposta
+    hash_ref = u["senha_hash"] if u else generate_password_hash("invalido")
+    ok = check_password_hash(hash_ref, senha) and u is not None
+    if not ok:
+        falhas += 1
+        _tentativas[chave] = (falhas, time.time() + 300 if falhas >= 5 else 0)
+        return jsonify({"erro": "Usuário ou senha inválidos."}), 401
+    if not u.get("ativo", True):
+        return jsonify({"erro": "Este acesso está bloqueado. Fale com o administrador."}), 403
+
+    _tentativas.pop(chave, None)
+    with _users_lock:
+        u["ultimo_acesso"] = _agora_iso()
+        _persistir_usuarios(usuarios, remoto=False)
+    session.clear()
+    session.permanent = True
+    session["login"] = login
+    return jsonify({"usuario": _usuario_publico(u)})
+
+
+@app.route("/api/logout", methods=["POST"])
+def api_logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/me", methods=["GET"])
+def api_me():
+    u = _usuario_logado()
+    if not u:
+        return jsonify({"usuario": None})
+    return jsonify({"usuario": _usuario_publico(u)})
+
+
+@app.route("/api/me/senha", methods=["POST"])
+@exigir_login
+def api_trocar_propria_senha():
+    u = _usuario_logado()
+    dados = request.get_json(silent=True) or {}
+    if not check_password_hash(u["senha_hash"], str(dados.get("senhaAtual", ""))):
+        return jsonify({"erro": "Senha atual incorreta."}), 400
+    nova = str(dados.get("novaSenha", ""))
+    erro = _validar_senha(nova)
+    if erro:
+        return jsonify({"erro": erro}), 400
+    if nova == str(dados.get("senhaAtual", "")):
+        return jsonify({"erro": "A nova senha precisa ser diferente da atual."}), 400
+    with _users_lock:
+        u["senha_hash"] = generate_password_hash(nova)
+        u["trocar_senha"] = False
+        _persistir_usuarios(_carregar_usuarios())
+    return jsonify({"usuario": _usuario_publico(u)})
+
+
+@app.route("/api/usuarios", methods=["GET"])
+@exigir_admin
+def api_listar_usuarios():
+    usuarios = _carregar_usuarios()
+    lista = sorted(usuarios.values(), key=lambda x: (x["perfil"] != "ADMINISTRADOR", x["nome"].lower()))
+    return jsonify({"usuarios": [_usuario_publico(u) for u in lista]})
+
+
+@app.route("/api/usuarios/mecanicos", methods=["GET"])
+@exigir_login
+def api_listar_mecanicos():
+    usuarios = _carregar_usuarios()
+    lista = [
+        {"login": u["login"], "nome": u["nome"], "matricula": u.get("matricula", "")}
+        for u in usuarios.values() if u["perfil"] == "MECANICO" and u.get("ativo", True)
+    ]
+    lista.sort(key=lambda x: x["nome"].lower())
+    return jsonify({"mecanicos": lista})
+
+
+@app.route("/api/usuarios", methods=["POST"])
+@exigir_admin
+def api_criar_usuario():
+    dados = request.get_json(silent=True) or {}
+    login = str(dados.get("login", "")).strip().lower()
+    nome = str(dados.get("nome", "")).strip()
+    perfil = str(dados.get("perfil", "")).strip().upper()
+    matricula = str(dados.get("matricula", "")).strip()[:20]
+    senha = str(dados.get("senha", ""))
+
+    if not LOGIN_RE.match(login):
+        return jsonify({"erro": "Login: 3 a 30 caracteres, só letras minúsculas, números, ponto, hífen ou _."}), 400
+    if len(nome) < 3:
+        return jsonify({"erro": "Informe o nome completo."}), 400
+    if perfil not in PERFIS:
+        return jsonify({"erro": "Perfil inválido."}), 400
+    erro = _validar_senha(senha)
+    if erro:
+        return jsonify({"erro": erro}), 400
+
+    with _users_lock:
+        usuarios = _carregar_usuarios()
+        if login in usuarios:
+            return jsonify({"erro": "Já existe um usuário com esse login."}), 409
+        usuarios[login] = {
+            "login": login,
+            "nome": nome[:80],
+            "matricula": matricula,
+            "perfil": perfil,
+            "senha_hash": generate_password_hash(senha),
+            "ativo": True,
+            "trocar_senha": bool(dados.get("trocarSenha", True)),
+            "criado_em": _agora_iso(),
+            "ultimo_acesso": "",
+        }
+        _persistir_usuarios(usuarios)
+        return jsonify({"usuario": _usuario_publico(usuarios[login])}), 201
+
+
+@app.route("/api/usuarios/<login>", methods=["PUT"])
+@exigir_admin
+def api_editar_usuario(login):
+    login = login.strip().lower()
+    dados = request.get_json(silent=True) or {}
+    atual = _usuario_logado()
+    with _users_lock:
+        usuarios = _carregar_usuarios()
+        u = usuarios.get(login)
+        if not u:
+            return jsonify({"erro": "Usuário não encontrado."}), 404
+
+        if "nome" in dados:
+            nome = str(dados["nome"]).strip()
+            if len(nome) < 3:
+                return jsonify({"erro": "Informe o nome completo."}), 400
+            u["nome"] = nome[:80]
+        if "matricula" in dados:
+            u["matricula"] = str(dados["matricula"]).strip()[:20]
+
+        novo_perfil = str(dados.get("perfil", u["perfil"])).strip().upper()
+        novo_ativo = bool(dados.get("ativo", u.get("ativo", True)))
+        if novo_perfil not in PERFIS:
+            return jsonify({"erro": "Perfil inválido."}), 400
+
+        era_admin_ativo = u["perfil"] == "ADMINISTRADOR" and u.get("ativo", True)
+        segue_admin_ativo = novo_perfil == "ADMINISTRADOR" and novo_ativo
+        if era_admin_ativo and not segue_admin_ativo and _qtd_admins_ativos(usuarios, ignorar=login) == 0:
+            return jsonify({"erro": "Precisa existir pelo menos um administrador ativo."}), 400
+        if login == atual["login"] and not novo_ativo:
+            return jsonify({"erro": "Você não pode bloquear o seu próprio acesso."}), 400
+
+        u["perfil"] = novo_perfil
+        u["ativo"] = novo_ativo
+        _persistir_usuarios(usuarios)
+        return jsonify({"usuario": _usuario_publico(u)})
+
+
+@app.route("/api/usuarios/<login>/senha", methods=["POST"])
+@exigir_admin
+def api_redefinir_senha(login):
+    login = login.strip().lower()
+    dados = request.get_json(silent=True) or {}
+    nova = str(dados.get("novaSenha", ""))
+    erro = _validar_senha(nova)
+    if erro:
+        return jsonify({"erro": erro}), 400
+    with _users_lock:
+        usuarios = _carregar_usuarios()
+        u = usuarios.get(login)
+        if not u:
+            return jsonify({"erro": "Usuário não encontrado."}), 404
+        u["senha_hash"] = generate_password_hash(nova)
+        u["trocar_senha"] = bool(dados.get("trocarSenha", True))
+        _persistir_usuarios(usuarios)
+        return jsonify({"usuario": _usuario_publico(u)})
+
+
+@app.route("/api/usuarios/<login>", methods=["DELETE"])
+@exigir_admin
+def api_excluir_usuario(login):
+    login = login.strip().lower()
+    atual = _usuario_logado()
+    with _users_lock:
+        usuarios = _carregar_usuarios()
+        u = usuarios.get(login)
+        if not u:
+            return jsonify({"erro": "Usuário não encontrado."}), 404
+        if login == atual["login"]:
+            return jsonify({"erro": "Você não pode excluir o seu próprio acesso."}), 400
+        if u["perfil"] == "ADMINISTRADOR" and u.get("ativo", True) and _qtd_admins_ativos(usuarios, ignorar=login) == 0:
+            return jsonify({"erro": "Precisa existir pelo menos um administrador ativo."}), 400
+        del usuarios[login]
+        _persistir_usuarios(usuarios)
+        return jsonify({"ok": True})
+
+
 @app.route("/")
 def index():
     return send_from_directory(".", "index.html")
 
 
 @app.route("/api/em-manutencao", methods=["GET"])
+@exigir_login
 def listar_em_manutencao():
     forcar = request.args.get("refresh") == "1"
     try:
@@ -274,6 +666,7 @@ def listar_em_manutencao():
 
 
 @app.route("/api/historico/<frota>", methods=["GET"])
+@exigir_login
 def obter_historico(frota):
     frota_limpa = frota.strip().upper()
     try:
@@ -289,6 +682,7 @@ def obter_historico(frota):
 
 
 @app.route("/api/log/entrada", methods=["POST"])
+@exigir_login
 def log_entrada():
     dados = dict(request.json or {})
     dados["tipo"] = "entrada"
@@ -302,6 +696,7 @@ def log_entrada():
 
 
 @app.route("/api/log/retirada", methods=["POST"])
+@exigir_login
 def log_retirada():
     dados = dict(request.json or {})
     dados["tipo"] = "retirada"

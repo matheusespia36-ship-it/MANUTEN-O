@@ -212,7 +212,7 @@
             type="text"
             id="input-usuario"
             autocomplete="username"
-            placeholder="encarregado, clecio, controlador ou admin"
+            placeholder="Digite seu usuário"
             class="w-full bg-[#090c12] border border-[#232d3d] focus:border-[#00379e] focus:ring-1 focus:ring-[#00379e] focus:outline-none rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-neutral-600 transition"
             required
           />
@@ -239,60 +239,9 @@
           Acessar Sistema
         </button>
 
-        <div class="pt-4 border-t border-[#232d3d]">
-          <p class="text-[10px] font-bold uppercase tracking-widest text-[#98989a] text-center mb-3">
-            Acesso por Perfil Operacional
-          </p>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              data-quick-user="encarregado"
-              class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#00379e] p-2.5 rounded-xl text-left transition cursor-pointer"
-            >
-              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-[#60a5fa] shrink-0">ENC</span>
-              <div class="min-w-0">
-                <div class="text-xs font-bold text-white truncate">Encarregado</div>
-                <div class="text-[10px] text-[#98989a] truncate">QHA + Abertura OS</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              data-quick-user="clecio"
-              class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#95d324] p-2.5 rounded-xl text-left transition cursor-pointer"
-            >
-              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-[#95d324] shrink-0">MEC</span>
-              <div class="min-w-0">
-                <div class="text-xs font-bold text-white truncate">Clecio (Mat. 1328)</div>
-                <div class="text-[10px] text-[#98989a] truncate">QHA + Minhas OS</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              data-quick-user="controlador"
-              class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#00379e] p-2.5 rounded-xl text-left transition cursor-pointer"
-            >
-              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">CCO</span>
-              <div class="min-w-0">
-                <div class="text-xs font-bold text-white truncate">Controlador (CCO)</div>
-                <div class="text-[10px] text-[#98989a] truncate">Fila Pendências xlsm</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              data-quick-user="admin"
-              class="btn-quick-login flex items-center gap-2.5 bg-[#131924] hover:bg-[#192231] border border-[#232d3d] hover:border-[#95d324] p-2.5 rounded-xl text-left transition cursor-pointer"
-            >
-              <span class="w-8 h-8 rounded-lg bg-[#090c12] border border-[#232d3d] flex items-center justify-center text-xs font-bold text-purple-400 shrink-0">ADM</span>
-              <div class="min-w-0">
-                <div class="text-xs font-bold text-white truncate">Administrador</div>
-                <div class="text-[10px] text-[#98989a] truncate">Acesso Total + Acessos</div>
-              </div>
-            </button>
-          </div>
-        </div>
+        <p class="pt-3 border-t border-[#232d3d] text-[10px] text-center text-[#98989a]">
+          Não tem acesso? Peça ao administrador para criar o seu usuário.
+        </p>
       </form>
     </div>
   </div>
@@ -355,10 +304,18 @@
 
           <button
             type="button"
+            id="btn-minha-senha"
+            class="bg-[#161d29] hover:bg-[#1f293a] border border-[#232d3d] text-neutral-200 font-semibold text-xs px-3.5 py-2 rounded-lg transition cursor-pointer"
+          >
+            Minha Senha
+          </button>
+
+          <button
+            type="button"
             id="btn-sair-login"
             class="bg-[#161d29] hover:bg-[#00379e] border border-[#232d3d] hover:border-[#00379e] text-neutral-200 hover:text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition cursor-pointer"
           >
-            Trocar Perfil
+            Sair
           </button>
         </div>
       </div>
@@ -509,10 +466,7 @@
                 <div>
                   <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Mecânico Destinado *</label>
                   <select id="os-mecanico" required class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
-                    <option value="Clecio Ribeiro dos Santos (Mat. 1328)">Clecio Ribeiro (Mat. 1328)</option>
-                    <option value="Marcos Vinícius (Mat. 1104)">Marcos Vinícius (Mat. 1104)</option>
-                    <option value="Rodrigo Alves (Mat. 1492)">Rodrigo Alves (Mat. 1492)</option>
-                    <option value="Anderson Lima (Mat. 1219)">Anderson Lima (Mat. 1219)</option>
+                    <option value="">Carregando mecânicos...</option>
                   </select>
                 </div>
               </div>
@@ -582,7 +536,7 @@
           </div>
           <div class="flex items-center gap-2">
             <span id="badge-mecanico-ativo" class="px-3 py-1.5 rounded-lg bg-[#161d29] border border-[#232d3d] text-xs font-mono-tech text-neutral-200">
-              Clecio (Mat. 1328)
+              —
             </span>
             <span id="contador-minhas-os" class="px-3 py-1.5 rounded-lg bg-[#00379e] text-white text-xs font-mono-tech font-bold">
               0 Ativas
@@ -667,19 +621,47 @@
           <div>
             <span class="text-[10px] font-bold uppercase tracking-widest text-[#95d324]">Administração de Segurança</span>
             <h2 class="text-base font-extrabold text-white">Gestão de Usuários e Permissões de Acesso</h2>
-            <p class="text-xs text-[#98989a]">Controle de perfis operacionais do Painel QHA &amp; Ordens de Serviço Fagundes.</p>
+            <p class="text-xs text-[#98989a]">Crie, edite, bloqueie e redefina a senha dos acessos do Painel QHA &amp; Ordens de Serviço.</p>
           </div>
+          <button type="button" id="btn-novo-usuario" class="bg-[#00379e] hover:bg-[#0047cc] text-white font-bold text-xs px-4 py-2.5 rounded-lg transition cursor-pointer whitespace-nowrap">
+            + Novo Usuário
+          </button>
         </div>
 
-        <div class="corp-card rounded-2xl overflow-hidden">
-          <table class="w-full text-left border-collapse text-xs">
+        <div id="aviso-senha-padrao" class="hidden bg-amber-950/40 border border-amber-500/50 text-amber-200 text-xs px-4 py-3 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span><strong>Atenção:</strong> você ainda está usando a senha inicial. Troque agora para proteger o painel.</span>
+          <button type="button" id="btn-aviso-trocar-senha" class="bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] px-3 py-1.5 rounded-lg cursor-pointer whitespace-nowrap">Trocar minha senha</button>
+        </div>
+
+        <div id="resumo-acessos" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></div>
+
+        <div class="corp-card rounded-2xl p-3 flex flex-col sm:flex-row gap-2.5">
+          <input type="search" id="busca-usuarios" placeholder="Buscar por nome, login ou matrícula..." class="flex-1 bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:border-[#00379e] focus:outline-none" />
+          <select id="filtro-perfil-usuarios" class="bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+            <option value="">Todos os perfis</option>
+            <option value="ADMINISTRADOR">Administrador</option>
+            <option value="ENCARREGADO">Encarregado</option>
+            <option value="MECANICO">Mecânico</option>
+            <option value="CONTROLADOR">Controlador (CCO)</option>
+          </select>
+          <select id="filtro-status-usuarios" class="bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+            <option value="">Todos os status</option>
+            <option value="ativo">Ativos</option>
+            <option value="bloqueado">Bloqueados</option>
+          </select>
+        </div>
+
+        <div class="corp-card rounded-2xl overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs min-w-[860px]">
             <thead>
               <tr class="bg-[#161d29] border-b border-[#232d3d] font-mono-tech uppercase text-[11px] text-[#98989a]">
-                <th class="py-3 px-4">Login</th>
-                <th class="py-3 px-4">Nome Completo</th>
+                <th class="py-3 px-4">Usuário</th>
                 <th class="py-3 px-4">Matrícula</th>
                 <th class="py-3 px-4">Perfil</th>
                 <th class="py-3 px-4">Abas Liberadas</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4">Último Acesso</th>
+                <th class="py-3 px-4 text-right">Ações</th>
               </tr>
             </thead>
             <tbody id="tbody-gestao-acessos" class="divide-y divide-[#232d3d]"></tbody>
@@ -689,6 +671,95 @@
 
     </main>
   </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAIS: USUÁRIO / SENHA                                               -->
+  <!-- ===================================================================== -->
+  <div id="modal-usuario" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
+    <div class="w-full max-w-md bg-[#10151e] border border-[#232d3d] rounded-2xl shadow-2xl overflow-hidden">
+      <div class="bg-[#161d29] px-5 py-4 border-b border-[#232d3d] flex items-center justify-between">
+        <h3 id="modal-usuario-titulo" class="text-base font-extrabold text-white">Novo Usuário</h3>
+        <button type="button" data-fechar-modal="modal-usuario" class="w-8 h-8 rounded-lg bg-[#090c12] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
+      <form id="form-usuario" class="p-5 space-y-3.5" autocomplete="off">
+        <input type="hidden" id="usr-modo" value="criar" />
+        <div id="usr-erro" class="hidden bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs px-3 py-2 rounded-lg"></div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Nome completo *</label>
+          <input id="usr-nome" required maxlength="80" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Login *</label>
+            <input id="usr-login" required maxlength="30" autocapitalize="none" placeholder="ex: joao.silva" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 font-mono-tech focus:border-[#00379e] focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Matrícula</label>
+            <input id="usr-matricula" maxlength="20" placeholder="ex: 1328" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 font-mono-tech focus:border-[#00379e] focus:outline-none" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Perfil de acesso *</label>
+          <select id="usr-perfil" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+            <option value="ENCARREGADO">Encarregado — QHA + Abertura de OS</option>
+            <option value="MECANICO">Mecânico — QHA + Minhas OS</option>
+            <option value="CONTROLADOR">Controlador (CCO) — QHA + Fila de Pendências</option>
+            <option value="ADMINISTRADOR">Administrador — Acesso total</option>
+          </select>
+          <p id="usr-abas-prev" class="text-[10px] text-[#98989a] mt-1.5"></p>
+        </div>
+        <div id="usr-bloco-senha">
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Senha inicial *</label>
+          <div class="flex gap-2">
+            <input id="usr-senha" type="text" autocomplete="new-password" class="flex-1 bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white font-mono-tech focus:border-[#00379e] focus:outline-none" />
+            <button type="button" id="btn-gerar-senha" class="px-3 rounded-lg bg-[#161d29] hover:bg-[#1f293a] border border-[#232d3d] text-neutral-200 text-[11px] font-bold cursor-pointer">Gerar</button>
+          </div>
+          <label class="flex items-center gap-2 mt-2 text-[11px] text-[#98989a] cursor-pointer">
+            <input type="checkbox" id="usr-trocar" checked class="accent-[#95d324]" /> Pedir para o usuário trocar a senha no primeiro acesso
+          </label>
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" data-fechar-modal="modal-usuario" class="px-4 py-2 rounded-lg bg-[#161d29] border border-[#232d3d] text-neutral-200 text-xs font-bold cursor-pointer">Cancelar</button>
+          <button type="submit" id="btn-salvar-usuario" class="px-4 py-2 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-xs font-bold cursor-pointer">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modal-senha" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-[#10151e] border border-[#232d3d] rounded-2xl shadow-2xl overflow-hidden">
+      <div class="bg-[#161d29] px-5 py-4 border-b border-[#232d3d] flex items-center justify-between">
+        <h3 id="modal-senha-titulo" class="text-base font-extrabold text-white">Alterar senha</h3>
+        <button type="button" data-fechar-modal="modal-senha" class="w-8 h-8 rounded-lg bg-[#090c12] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
+      <form id="form-senha" class="p-5 space-y-3.5" autocomplete="off">
+        <input type="hidden" id="sen-alvo" value="" />
+        <div id="sen-erro" class="hidden bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs px-3 py-2 rounded-lg"></div>
+        <div id="sen-bloco-atual">
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Senha atual *</label>
+          <input id="sen-atual" type="password" autocomplete="current-password" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Nova senha *</label>
+          <div class="flex gap-2">
+            <input id="sen-nova" type="password" autocomplete="new-password" class="flex-1 bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white font-mono-tech focus:border-[#00379e] focus:outline-none" />
+            <button type="button" id="btn-sen-gerar" class="px-3 rounded-lg bg-[#161d29] hover:bg-[#1f293a] border border-[#232d3d] text-neutral-200 text-[11px] font-bold cursor-pointer">Gerar</button>
+          </div>
+          <label class="flex items-center gap-2 mt-2 text-[11px] text-[#98989a] cursor-pointer">
+            <input type="checkbox" id="sen-mostrar" class="accent-[#95d324]" /> Mostrar senha
+          </label>
+        </div>
+        <label id="sen-bloco-trocar" class="hidden flex items-center gap-2 text-[11px] text-[#98989a] cursor-pointer">
+          <input type="checkbox" id="sen-trocar" checked class="accent-[#95d324]" /> Pedir para trocar no próximo acesso
+        </label>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" data-fechar-modal="modal-senha" class="px-4 py-2 rounded-lg bg-[#161d29] border border-[#232d3d] text-neutral-200 text-xs font-bold cursor-pointer">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-xs font-bold cursor-pointer">Salvar senha</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
 
   <!-- ===================================================================== -->
   <!-- MODAL: HISTÓRICO TÉCNICO DO EQUIPAMENTO                               -->
@@ -795,59 +866,67 @@
     (function () {
       'use strict';
 
-      const USUARIOS_SISTEMA = {
-        encarregado: {
-          login: 'encarregado',
-          senha: '123',
-          nome: 'Encarregado de Oficina',
-          matricula: 'Mat. 0841',
-          sigla: 'ENC',
-          perfil: 'ENCARREGADO',
-          abas: [
-            { id: 'quadro', label: '1. Quadro de Manutenções (QHA)' },
-            { id: 'os', label: '2. Ordens de Serviço (OS)' }
-          ]
-        },
-        clecio: {
-          login: 'clecio',
-          senha: '123',
-          nome: 'Clecio Ribeiro dos Santos',
-          matricula: 'Mat. 1328',
-          sigla: 'MEC',
-          perfil: 'MECANICO',
-          abas: [
-            { id: 'quadro', label: '1. Quadro de Manutenções (QHA)' },
-            { id: 'minhas-os', label: '2. Minhas OS (Lista)' }
-          ]
-        },
-        controlador: {
-          login: 'controlador',
-          senha: '123',
-          nome: 'Controlador CCO',
-          matricula: 'Mat. 0512',
-          perfil: 'CONTROLADOR',
-          sigla: 'CCO',
-          abas: [
-            { id: 'quadro', label: '1. Quadro de Manutenções (QHA)' },
-            { id: 'pendencias', label: '2. Fila de Pendências (CCO)' }
-          ]
-        },
-        admin: {
-          login: 'admin',
-          senha: '123',
-          nome: 'Administrador Geral',
-          matricula: 'Mat. 0001',
-          sigla: 'ADM',
-          perfil: 'ADMINISTRADOR',
-          abas: [
-            { id: 'quadro', label: '1. Quadro de Manutenções (QHA)' },
-            { id: 'os', label: '2. Ordens de Serviço (OS)' },
-            { id: 'minhas-os', label: '3. Minhas OS (Lista)' },
-            { id: 'pendencias', label: '4. Fila de Pendências (xlsm)' },
-            { id: 'acessos', label: '5. Gestão de Acessos' }
-          ]
-        }
+      // Usuários e senhas ficam no servidor (senha criptografada). Aqui só existe o rótulo das abas.
+      const ABAS_ROTULO = {
+        quadro: 'Quadro de Manutenções (QHA)',
+        os: 'Ordens de Serviço (OS)',
+        'minhas-os': 'Minhas OS (Lista)',
+        pendencias: 'Fila de Pendências (CCO)',
+        acessos: 'Gestão de Acessos'
       };
+      const PERFIL_ROTULO = {
+        ADMINISTRADOR: 'Administrador',
+        ENCARREGADO: 'Encarregado',
+        MECANICO: 'Mecânico',
+        CONTROLADOR: 'Controlador (CCO)'
+      };
+      const PERFIL_SIGLA = { ADMINISTRADOR: 'ADM', ENCARREGADO: 'ENC', MECANICO: 'MEC', CONTROLADOR: 'CCO' };
+      const PERFIL_ABAS = {
+        ENCARREGADO: ['quadro', 'os'],
+        MECANICO: ['quadro', 'minhas-os'],
+        CONTROLADOR: ['quadro', 'pendencias'],
+        ADMINISTRADOR: ['quadro', 'os', 'minhas-os', 'pendencias', 'acessos']
+      };
+
+      function esc(v) {
+        return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+
+      function fmtMat(m) {
+        const t = String(m || '').trim();
+        if (!t) return '—';
+        return /^mat/i.test(t) ? t : `Mat. ${t}`;
+      }
+
+      // Converte o usuário vindo da API no formato usado pela interface
+      function montarUsuarioUI(u) {
+        return {
+          ...u,
+          sigla: PERFIL_SIGLA[u.perfil] || 'OP',
+          matricula: fmtMat(u.matricula),
+          abas: u.abas.map((id, i) => ({ id, label: `${i + 1}. ${ABAS_ROTULO[id] || id}` }))
+        };
+      }
+
+      async function api(url, opts = {}) {
+        const res = await fetch(url, {
+          credentials: 'same-origin',
+          ...opts,
+          headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+          body: opts.body ? JSON.stringify(opts.body) : undefined
+        });
+        let data = {};
+        try { data = await res.json(); } catch (_) { /* resposta sem corpo */ }
+        if (res.status === 401 && estado.usuarioAtual) {
+          sairDoSistema();
+          mostrarToast('Sessão expirada', 'Entre novamente para continuar.', 'warning');
+        }
+        if (!res.ok) throw new Error(data.erro || `Erro ${res.status}`);
+        return data;
+      }
+
+      let listaUsuarios = [];
+      let listaMecanicos = [];
 
       const CATALOGO_FROTAS = [
         { frota: 'C1964', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 21450 },
@@ -1178,7 +1257,7 @@
         const minhas = ordensServico.filter((os) => {
           if (os.status === 'CONCLUIDA') return false;
           if (user && user.perfil === 'ADMINISTRADOR') return true;
-          return os.mecanico.includes('Clecio');
+          return !!user && os.mecanico.includes(user.nome);
         });
 
         if (contador) contador.textContent = `${minhas.length} Ativa${minhas.length === 1 ? '' : 's'}`;
@@ -1477,7 +1556,7 @@
             badgeExtra = `<span class="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono-tech ${ativa ? 'bg-[#95d324] text-[#090c12] font-extrabold' : 'bg-[#232d3d] text-white'}">${filaPendencias.length}</span>`;
           }
           if (aba.id === 'minhas-os') {
-            const qtdMec = ordensServico.filter((o) => o.status !== 'CONCLUIDA' && (user.perfil === 'ADMINISTRADOR' || o.mecanico.includes('Clecio'))).length;
+            const qtdMec = ordensServico.filter((o) => o.status !== 'CONCLUIDA' && (user.perfil === 'ADMINISTRADOR' || o.mecanico.includes(user.nome))).length;
             badgeExtra = `<span class="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono-tech ${ativa ? 'bg-[#95d324] text-[#090c12] font-extrabold' : 'bg-[#232d3d] text-white'}">${qtdMec}</span>`;
           }
 
@@ -1509,18 +1588,296 @@
         });
       }
 
+      function fmtDataHora(s) {
+        if (!s) return 'Nunca';
+        const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+        return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : s;
+      }
+
+      async function carregarUsuarios() {
+        if (!estado.usuarioAtual || estado.usuarioAtual.perfil !== 'ADMINISTRADOR') return;
+        try {
+          const data = await api('/api/usuarios');
+          listaUsuarios = data.usuarios || [];
+          renderizarGestaoAcessos();
+        } catch (e) {
+          mostrarToast('Erro ao carregar usuários', esc(e.message), 'warning');
+        }
+      }
+
+      async function carregarMecanicos() {
+        try {
+          const data = await api('/api/usuarios/mecanicos');
+          listaMecanicos = data.mecanicos || [];
+        } catch (_) {
+          listaMecanicos = [];
+        }
+        const sel = document.getElementById('os-mecanico');
+        if (!sel) return;
+        if (listaMecanicos.length === 0) {
+          sel.innerHTML = '<option value="">Nenhum mecânico cadastrado (peça ao administrador)</option>';
+        } else {
+          sel.innerHTML = listaMecanicos
+            .map((m) => `<option value="${esc(`${m.nome} (${fmtMat(m.matricula)})`)}">${esc(m.nome)} (${esc(fmtMat(m.matricula))})</option>`)
+            .join('');
+        }
+      }
+
       function renderizarGestaoAcessos() {
         const tbody = document.getElementById('tbody-gestao-acessos');
         if (!tbody) return;
-        tbody.innerHTML = Object.values(USUARIOS_SISTEMA).map((u) => `
-          <tr class="hover:bg-[#161d29]">
-            <td class="py-3 px-4 font-mono-tech font-bold text-[#95d324]">${u.login}</td>
-            <td class="py-3 px-4 font-semibold text-white">${u.nome}</td>
-            <td class="py-3 px-4 font-mono-tech text-neutral-300">${u.matricula}</td>
-            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-[#00379e]/40 border border-[#00379e] text-blue-200 font-mono-tech text-[10px] font-bold">${u.perfil}</span></td>
-            <td class="py-3 px-4 text-[#98989a]">${u.abas.map((a) => a.label).join(' • ')}</td>
-          </tr>
-        `).join('');
+        const eu = estado.usuarioAtual;
+
+        // Aviso de senha inicial
+        const aviso = document.getElementById('aviso-senha-padrao');
+        if (aviso) aviso.classList.toggle('hidden', !(eu && eu.trocarSenha));
+
+        // Resumo
+        const resumo = document.getElementById('resumo-acessos');
+        if (resumo) {
+          const ativos = listaUsuarios.filter((u) => u.ativo).length;
+          const card = (rotulo, valor, cor) => `
+            <div class="corp-card rounded-xl p-3.5">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-[#98989a]">${rotulo}</div>
+              <div class="text-2xl font-extrabold font-mono-tech ${cor}">${valor}</div>
+            </div>`;
+          resumo.innerHTML =
+            card('Usuários', listaUsuarios.length, 'text-white') +
+            card('Ativos', ativos, 'text-[#95d324]') +
+            card('Bloqueados', listaUsuarios.length - ativos, listaUsuarios.length - ativos ? 'text-rose-400' : 'text-white') +
+            card('Mecânicos', listaUsuarios.filter((u) => u.perfil === 'MECANICO').length, 'text-white') +
+            card('Administradores', listaUsuarios.filter((u) => u.perfil === 'ADMINISTRADOR').length, 'text-white');
+        }
+
+        const termo = (document.getElementById('busca-usuarios')?.value || '').trim().toLowerCase();
+        const fPerfil = document.getElementById('filtro-perfil-usuarios')?.value || '';
+        const fStatus = document.getElementById('filtro-status-usuarios')?.value || '';
+        const filtrados = listaUsuarios.filter((u) => {
+          if (fPerfil && u.perfil !== fPerfil) return false;
+          if (fStatus === 'ativo' && !u.ativo) return false;
+          if (fStatus === 'bloqueado' && u.ativo) return false;
+          if (termo && !`${u.nome} ${u.login} ${u.matricula}`.toLowerCase().includes(termo)) return false;
+          return true;
+        });
+
+        if (filtrados.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="py-8 px-4 text-center text-[#98989a]">Nenhum usuário encontrado.</td></tr>';
+          return;
+        }
+
+        const btn = 'px-2 py-1 rounded-md border text-[10px] font-bold cursor-pointer transition';
+        tbody.innerHTML = filtrados.map((u) => {
+          const souEu = eu && u.login === eu.login;
+          const status = u.ativo
+            ? '<span class="px-2 py-0.5 rounded bg-[#95d324]/15 border border-[#95d324]/60 text-[#95d324] font-mono-tech text-[10px] font-bold">ATIVO</span>'
+            : '<span class="px-2 py-0.5 rounded bg-rose-950/60 border border-rose-500/60 text-rose-300 font-mono-tech text-[10px] font-bold">BLOQUEADO</span>';
+          const pendente = u.trocarSenha ? '<div class="text-[10px] text-amber-300 mt-0.5">Senha provisória</div>' : '';
+          const chips = u.abas.map((a) => `<span class="inline-block px-1.5 py-0.5 rounded bg-[#090c12] border border-[#232d3d] text-[10px] text-neutral-300 mr-1 mb-1">${esc(ABAS_ROTULO[a] || a)}</span>`).join('');
+          return `
+          <tr class="hover:bg-[#161d29] ${u.ativo ? '' : 'opacity-70'}">
+            <td class="py-3 px-4">
+              <div class="font-semibold text-white">${esc(u.nome)}${souEu ? ' <span class="text-[10px] text-[#95d324]">(você)</span>' : ''}</div>
+              <div class="font-mono-tech text-[11px] text-[#95d324]">${esc(u.login)}</div>
+            </td>
+            <td class="py-3 px-4 font-mono-tech text-neutral-300">${esc(fmtMat(u.matricula))}</td>
+            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-[#00379e]/40 border border-[#00379e] text-blue-200 font-mono-tech text-[10px] font-bold">${esc(PERFIL_ROTULO[u.perfil] || u.perfil)}</span></td>
+            <td class="py-3 px-4 max-w-[260px]">${chips}</td>
+            <td class="py-3 px-4">${status}${pendente}</td>
+            <td class="py-3 px-4 text-[#98989a] font-mono-tech text-[11px]">${esc(fmtDataHora(u.ultimoAcesso))}</td>
+            <td class="py-3 px-4">
+              <div class="flex flex-wrap justify-end gap-1.5" data-login="${esc(u.login)}">
+                <button type="button" data-acao="editar" class="${btn} bg-[#161d29] border-[#232d3d] text-neutral-200 hover:border-[#00379e]">Editar</button>
+                <button type="button" data-acao="senha" class="${btn} bg-[#161d29] border-[#232d3d] text-neutral-200 hover:border-[#00379e]">Senha</button>
+                ${souEu ? '' : `<button type="button" data-acao="status" class="${btn} bg-[#161d29] border-[#232d3d] ${u.ativo ? 'text-amber-300 hover:border-amber-400' : 'text-[#95d324] hover:border-[#95d324]'}">${u.ativo ? 'Bloquear' : 'Ativar'}</button>
+                <button type="button" data-acao="excluir" class="${btn} bg-[#161d29] border-[#232d3d] text-rose-300 hover:border-rose-400">Excluir</button>`}
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+      }
+
+      function abrirModal(id) {
+        const m = document.getElementById(id);
+        if (!m) return;
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+      }
+      function fecharModal(id) {
+        const m = document.getElementById(id);
+        if (!m) return;
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+      }
+
+      function gerarSenhaAleatoria() {
+        const letras = 'abcdefghjkmnpqrstuvwxyz';
+        const nums = '23456789';
+        const pick = (set) => set[crypto.getRandomValues(new Uint32Array(1))[0] % set.length];
+        let s = '';
+        for (let i = 0; i < 5; i++) s += pick(letras);
+        for (let i = 0; i < 3; i++) s += pick(nums);
+        return s;
+      }
+
+      function atualizarPreviaAbas() {
+        const perfil = document.getElementById('usr-perfil').value;
+        document.getElementById('usr-abas-prev').textContent =
+          'Abas liberadas: ' + (PERFIL_ABAS[perfil] || []).map((a) => ABAS_ROTULO[a]).join(' • ');
+      }
+
+      function abrirModalUsuario(login) {
+        const editando = !!login;
+        const u = editando ? listaUsuarios.find((x) => x.login === login) : null;
+        document.getElementById('modal-usuario-titulo').textContent = editando ? 'Editar Usuário' : 'Novo Usuário';
+        document.getElementById('usr-modo').value = editando ? login : 'criar';
+        document.getElementById('usr-nome').value = u ? u.nome : '';
+        document.getElementById('usr-login').value = u ? u.login : '';
+        document.getElementById('usr-login').disabled = editando;
+        document.getElementById('usr-matricula').value = u ? u.matricula : '';
+        document.getElementById('usr-perfil').value = u ? u.perfil : 'MECANICO';
+        document.getElementById('usr-senha').value = editando ? '' : gerarSenhaAleatoria();
+        document.getElementById('usr-trocar').checked = true;
+        document.getElementById('usr-bloco-senha').classList.toggle('hidden', editando);
+        document.getElementById('usr-senha').required = !editando;
+        document.getElementById('usr-erro').classList.add('hidden');
+        atualizarPreviaAbas();
+        abrirModal('modal-usuario');
+        document.getElementById('usr-nome').focus();
+      }
+
+      function abrirModalSenha(login) {
+        const propria = login === null;
+        document.getElementById('modal-senha-titulo').textContent = propria ? 'Alterar minha senha' : `Redefinir senha de ${login}`;
+        document.getElementById('sen-alvo').value = propria ? '' : login;
+        document.getElementById('sen-atual').value = '';
+        document.getElementById('sen-nova').value = '';
+        document.getElementById('sen-nova').type = 'password';
+        document.getElementById('sen-mostrar').checked = false;
+        document.getElementById('sen-bloco-atual').classList.toggle('hidden', !propria);
+        document.getElementById('sen-bloco-trocar').classList.toggle('hidden', propria);
+        document.getElementById('sen-bloco-trocar').classList.toggle('flex', !propria);
+        document.getElementById('sen-erro').classList.add('hidden');
+        abrirModal('modal-senha');
+        document.getElementById(propria ? 'sen-atual' : 'sen-nova').focus();
+      }
+
+      async function acaoUsuario(login, acao) {
+        const u = listaUsuarios.find((x) => x.login === login);
+        if (!u) return;
+        if (acao === 'editar') return abrirModalUsuario(login);
+        if (acao === 'senha') return abrirModalSenha(login);
+        try {
+          if (acao === 'status') {
+            const msg = u.ativo
+              ? `Bloquear o acesso de ${u.nome}? Ele não conseguirá mais entrar.`
+              : `Reativar o acesso de ${u.nome}?`;
+            if (!confirm(msg)) return;
+            await api(`/api/usuarios/${encodeURIComponent(login)}`, { method: 'PUT', body: { ativo: !u.ativo } });
+            mostrarToast(u.ativo ? 'Acesso bloqueado' : 'Acesso reativado', esc(u.nome), 'info');
+          } else if (acao === 'excluir') {
+            if (!confirm(`Excluir definitivamente o usuário "${u.login}" (${u.nome})? Esta ação não pode ser desfeita.`)) return;
+            await api(`/api/usuarios/${encodeURIComponent(login)}`, { method: 'DELETE' });
+            mostrarToast('Usuário excluído', esc(u.nome), 'info');
+          }
+          await carregarUsuarios();
+          carregarMecanicos();
+        } catch (e) {
+          mostrarToast('Não foi possível concluir', esc(e.message), 'warning');
+        }
+      }
+
+      function ligarGestaoAcessos() {
+        document.getElementById('btn-novo-usuario')?.addEventListener('click', () => abrirModalUsuario(null));
+        document.getElementById('btn-minha-senha')?.addEventListener('click', () => abrirModalSenha(null));
+        document.getElementById('btn-aviso-trocar-senha')?.addEventListener('click', () => abrirModalSenha(null));
+        document.getElementById('usr-perfil')?.addEventListener('change', atualizarPreviaAbas);
+        document.getElementById('btn-gerar-senha')?.addEventListener('click', () => {
+          document.getElementById('usr-senha').value = gerarSenhaAleatoria();
+        });
+        document.getElementById('btn-sen-gerar')?.addEventListener('click', () => {
+          const i = document.getElementById('sen-nova');
+          i.value = gerarSenhaAleatoria();
+          i.type = 'text';
+          document.getElementById('sen-mostrar').checked = true;
+        });
+        document.getElementById('sen-mostrar')?.addEventListener('change', (e) => {
+          document.getElementById('sen-nova').type = e.target.checked ? 'text' : 'password';
+        });
+        document.querySelectorAll('[data-fechar-modal]').forEach((b) => {
+          b.addEventListener('click', () => fecharModal(b.getAttribute('data-fechar-modal')));
+        });
+        ['busca-usuarios', 'filtro-perfil-usuarios', 'filtro-status-usuarios'].forEach((id) => {
+          document.getElementById(id)?.addEventListener('input', renderizarGestaoAcessos);
+        });
+        document.getElementById('tbody-gestao-acessos')?.addEventListener('click', (e) => {
+          const b = e.target.closest('[data-acao]');
+          if (!b) return;
+          acaoUsuario(b.parentElement.getAttribute('data-login'), b.getAttribute('data-acao'));
+        });
+
+        document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const erro = document.getElementById('usr-erro');
+          erro.classList.add('hidden');
+          const modo = document.getElementById('usr-modo').value;
+          const corpo = {
+            nome: document.getElementById('usr-nome').value.trim(),
+            matricula: document.getElementById('usr-matricula').value.trim(),
+            perfil: document.getElementById('usr-perfil').value
+          };
+          const salvar = document.getElementById('btn-salvar-usuario');
+          salvar.disabled = true;
+          try {
+            if (modo === 'criar') {
+              corpo.login = document.getElementById('usr-login').value.trim().toLowerCase();
+              corpo.senha = document.getElementById('usr-senha').value;
+              corpo.trocarSenha = document.getElementById('usr-trocar').checked;
+              await api('/api/usuarios', { method: 'POST', body: corpo });
+              mostrarToast('Usuário criado', `${esc(corpo.nome)} • login <b>${esc(corpo.login)}</b> • senha: <b>${esc(corpo.senha)}</b>`, 'success');
+            } else {
+              await api(`/api/usuarios/${encodeURIComponent(modo)}`, { method: 'PUT', body: corpo });
+              mostrarToast('Usuário atualizado', esc(corpo.nome), 'success');
+            }
+            fecharModal('modal-usuario');
+            await carregarUsuarios();
+            carregarMecanicos();
+          } catch (err) {
+            erro.textContent = err.message;
+            erro.classList.remove('hidden');
+          } finally {
+            salvar.disabled = false;
+          }
+        });
+
+        document.getElementById('form-senha')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const erro = document.getElementById('sen-erro');
+          erro.classList.add('hidden');
+          const alvo = document.getElementById('sen-alvo').value;
+          const nova = document.getElementById('sen-nova').value;
+          try {
+            if (!alvo) {
+              const data = await api('/api/me/senha', {
+                method: 'POST',
+                body: { senhaAtual: document.getElementById('sen-atual').value, novaSenha: nova }
+              });
+              estado.usuarioAtual = montarUsuarioUI(data.usuario);
+              mostrarToast('Senha alterada', 'Use a nova senha no próximo acesso.', 'success');
+            } else {
+              await api(`/api/usuarios/${encodeURIComponent(alvo)}/senha`, {
+                method: 'POST',
+                body: { novaSenha: nova, trocarSenha: document.getElementById('sen-trocar').checked }
+              });
+              mostrarToast('Senha redefinida', `Nova senha de <b>${esc(alvo)}</b>: <b>${esc(nova)}</b>`, 'success');
+            }
+            fecharModal('modal-senha');
+            await carregarUsuarios();
+            renderizarGestaoAcessos();
+          } catch (err) {
+            erro.textContent = err.message;
+            erro.classList.remove('hidden');
+          }
+        });
       }
 
       function popularSelectsFrota() {
@@ -1549,10 +1906,8 @@
         renderizarGestaoAcessos();
       }
 
-      function entrarNoSistema(loginKey) {
-        const user = USUARIOS_SISTEMA[loginKey];
-        if (!user) return;
-
+      function entrarNoSistema(usuarioApi, boasVindas = true) {
+        const user = montarUsuarioUI(usuarioApi);
         estado.usuarioAtual = user;
         estado.abaAtiva = user.abas[0].id;
 
@@ -1570,7 +1925,22 @@
 
         renderizarTudo();
         sincronizarComPlanilhaRealDrive(false);
-        mostrarToast('Acesso Confirmado', `${user.nome} (${user.perfil}) autenticado com sucesso.`, 'success');
+        carregarMecanicos();
+        carregarUsuarios();
+        if (boasVindas) {
+          mostrarToast('Acesso Confirmado', `${esc(user.nome)} (${esc(user.perfil)}) autenticado com sucesso.`, 'success');
+          if (user.trocarSenha) {
+            mostrarToast('Troque sua senha', 'Você está usando uma senha provisória. Clique em "Minha Senha".', 'warning');
+          }
+        }
+      }
+
+      function sairDoSistema() {
+        estado.usuarioAtual = null;
+        listaUsuarios = [];
+        document.getElementById('tela-sistema').classList.add('hidden');
+        document.getElementById('tela-login').classList.remove('hidden');
+        document.getElementById('input-senha').value = '';
       }
 
       function inicializar() {
@@ -1587,37 +1957,39 @@
           }
         }, 1000);
 
+        ligarGestaoAcessos();
+
         const formLogin = document.getElementById('form-login');
         if (formLogin) {
-          formLogin.addEventListener('submit', (e) => {
+          formLogin.addEventListener('submit', async (e) => {
             e.preventDefault();
             const login = (document.getElementById('input-usuario').value || '').trim().toLowerCase();
-            const senha = (document.getElementById('input-senha').value || '').trim();
+            const senha = document.getElementById('input-senha').value || '';
             const erroBox = document.getElementById('erro-login');
-
-            if (USUARIOS_SISTEMA[login] && senha === USUARIOS_SISTEMA[login].senha) {
+            const botao = formLogin.querySelector('button[type="submit"]');
+            botao.disabled = true;
+            try {
+              const data = await api('/api/login', { method: 'POST', body: { login, senha } });
               erroBox.classList.add('hidden');
-              entrarNoSistema(login);
-            } else {
+              entrarNoSistema(data.usuario);
+            } catch (err) {
+              document.getElementById('erro-login-texto').textContent = err.message;
               erroBox.classList.remove('hidden');
+            } finally {
+              botao.disabled = false;
             }
           });
         }
 
-        document.querySelectorAll('.btn-quick-login').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const u = btn.getAttribute('data-quick-user');
-            document.getElementById('input-usuario').value = u;
-            document.getElementById('input-senha').value = '123';
-            document.getElementById('erro-login').classList.add('hidden');
-            entrarNoSistema(u);
-          });
-        });
+        // Mantém a sessão ao recarregar a página
+        fetch('/api/me', { credentials: 'same-origin' })
+          .then((r) => r.json())
+          .then((d) => { if (d && d.usuario) entrarNoSistema(d.usuario, false); })
+          .catch(() => {});
 
-        document.getElementById('btn-sair-login')?.addEventListener('click', () => {
-          estado.usuarioAtual = null;
-          document.getElementById('tela-sistema').classList.add('hidden');
-          document.getElementById('tela-login').classList.remove('hidden');
+        document.getElementById('btn-sair-login')?.addEventListener('click', async () => {
+          try { await api('/api/logout', { method: 'POST' }); } catch (_) { /* segue para a tela de login */ }
+          sairDoSistema();
         });
 
         document.getElementById('btn-testar-sirene')?.addEventListener('click', () => {
@@ -1899,8 +2271,8 @@
             fim: '',
             duracaoMin: 15.0,
             especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-            matricula: '1328',
-            executante: 'Clecio Ribeiro dos Santos',
+            matricula: String(estado.usuarioAtual?.matricula || '').replace(/^Mat\.\s*/i, '') || '-',
+            executante: estado.usuarioAtual?.nome || '-',
             horimetro: catInfo.horimetro,
             tipo: 'Corretiva',
             local: catInfo.local,

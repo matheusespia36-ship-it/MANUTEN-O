@@ -9,3 +9,7 @@ services:
         sync: false   # preencha no painel do Render
       - key: APPS_SCRIPT_URL
         sync: false   # opcional
+      - key: SECRET_KEY
+        generateValue: true
+      - key: USERS_SYNC_TOKEN
+        sync: false   # mesmo texto do USERS_SYNC_TOKEN no Apps Script
