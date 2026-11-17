@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: painel-manutencao-qha
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PUBLIC_FILE_ID
+        sync: false   # preencha no painel do Render
+      - key: APPS_SCRIPT_URL
+        sync: false   # opcional

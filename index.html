@@ -6,7 +6,7 @@
   <title>Painel de Manutenção & OS (QHA) • Fagundes Construção e Mineração</title>
 
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Tone.js para Sirene Industrial LFO -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
@@ -192,7 +192,7 @@
             PAINEL DE MANUTENÇÃO &amp; OS <span class="text-[#95d324]">(QHA)</span>
           </h1>
           <p class="text-xs text-[#98989a] mt-1 flex items-center gap-1.5">
-            <span>Sincronização automática (2 min):</span>
+            <span>Sincronização automática (10 min):</span>
             <code class="bg-[#090c12] text-[#95d324] border border-[#232d3d] px-2 py-0.5 rounded font-mono-tech text-[11px]">manuntecao.xlsm • Google Drive</code>
           </p>
         </div>
@@ -324,7 +324,7 @@
               </h1>
               <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-[#090c12] text-neutral-300 border border-[#232d3d] px-2.5 py-0.5 rounded">
                 <span class="w-1.5 h-1.5 rounded-full bg-[#95d324] animate-pulse"></span>
-                manuntecao.xlsm • Varredura 2m (<span id="header-timer-10m" class="font-mono-tech text-[#95d324]">02:00</span>)
+                manuntecao.xlsm • Sincronizado
               </span>
             </div>
             <p class="text-[11px] text-[#98989a] mt-0.5">
@@ -418,12 +418,11 @@
           <div class="corp-card rounded-xl p-4 border-l-4 border-l-[#95d324] flex items-center justify-between gap-2">
             <div>
               <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-[#95d324] animate-pulse"></span>
-                <span class="text-[11px] font-bold uppercase tracking-wider text-[#95d324]">Integração Google Drive • Conectado</span>
+                <span class="w-2 h-2 rounded-full bg-[#95d324]"></span>
+                <span class="text-xs font-bold text-white font-mono-tech">manuntecao.xlsm</span>
               </div>
-              <div class="mt-1.5 flex items-baseline gap-2 flex-wrap">
-                <span class="text-base font-bold text-white font-mono-tech">manuntecao.xlsm</span>
-                <span class="text-xs text-[#98989a]">• Última atualização: <strong id="kpi-ultima-atualizacao" class="text-white font-mono-tech">--:--:--</strong></span>
+              <div class="mt-1 text-xs text-[#98989a]">
+                Atualizado: <strong id="kpi-ultima-atualizacao" class="text-white font-mono-tech">--:--:--</strong>
               </div>
             </div>
             <button type="button" id="btn-sincronizar-planilha-real" class="px-3 py-2 rounded-lg bg-[#161d29] hover:bg-[#00379e] border border-[#232d3d] text-xs font-bold text-white cursor-pointer transition shrink-0">
@@ -433,38 +432,12 @@
         </div>
 
         <div class="corp-card rounded-xl p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div id="qha-category-pills" class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
-            <button type="button" data-qha-cat="TODAS" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-[#00379e] text-white transition whitespace-nowrap cursor-pointer">
-              Todas as Categorias
-            </button>
-            <button type="button" data-qha-cat="EQUIPAMENTO MINA" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">
-              Mina
-            </button>
-            <button type="button" data-qha-cat="EQUIPAMENTO DRYSTACK" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">
-              Drystack
-            </button>
-            <button type="button" data-qha-cat="EQUIPAMENTO ALIMENTACAO" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">
-              Alimentação
-            </button>
-            <button type="button" data-qha-cat="EQUIPAMENTO INFRA" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">
-              Infraestrutura
-            </button>
-            <button type="button" data-qha-cat="EQUIPAMENTO AUXILIAR" class="qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer">
-              Auxiliar
-            </button>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <div class="relative flex-1 sm:w-72">
-              <input
-                type="text"
-                id="qha-busca-texto"
-                placeholder="Buscar frota, estado ou comentário..."
-                class="w-full bg-[#090c12] border border-[#232d3d] focus:border-[#00379e] focus:outline-none rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-neutral-500"
-              />
-              <span class="absolute left-2.5 top-2 text-xs text-[#98989a]">🔍</span>
-            </div>
-          </div>
+          <input
+            type="text"
+            id="qha-busca-texto"
+            placeholder="Buscar por frota, especialidade ou comentário..."
+            class="w-full lg:max-w-sm bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:border-[#00379e] focus:outline-none"
+          />
         </div>
 
         <div class="corp-card rounded-xl overflow-hidden">
@@ -645,7 +618,7 @@
           <div class="space-y-1">
             <div class="flex flex-wrap items-center gap-2">
               <span class="px-2.5 py-0.5 rounded bg-[#00379e] text-white font-mono-tech text-[11px] font-bold">manuntecao.xlsm</span>
-              <span class="text-xs font-bold uppercase tracking-wider text-[#95d324]">Sincronização Automática a cada 2 minutos</span>
+              <span class="text-xs font-bold uppercase tracking-wider text-[#95d324]">Sincronização Automática a cada 10 minutos</span>
             </div>
             <h2 class="text-base sm:text-lg font-extrabold text-white">
               Fila de Pendências CCO (Exclusão Automática via Colunas Início &amp; Fim)
@@ -658,7 +631,7 @@
 
           <div class="flex flex-wrap items-center gap-2.5 shrink-0">
             <div class="bg-[#090c12] border border-[#232d3d] rounded-xl px-3.5 py-2 text-right">
-              <div class="text-[10px] uppercase tracking-wider text-[#98989a]">Próxima Varredura (2m)</div>
+              <div class="text-[10px] uppercase tracking-wider text-[#98989a]">Próxima Varredura (10m)</div>
               <div id="cco-countdown-display" class="text-base font-extrabold font-mono-tech text-[#95d324]">10:00</div>
             </div>
 
@@ -667,7 +640,7 @@
               id="btn-varredura-agora"
               class="px-4 py-3 rounded-xl bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] font-extrabold text-xs uppercase tracking-wider transition cursor-pointer shadow"
             >
-              🔄 Executar Varredura Agora
+              🔄 Executar Varredura 10 min Agora
             </button>
           </div>
         </div>
@@ -684,56 +657,6 @@
           <div id="lista-pendencias-cco" class="divide-y divide-[#232d3d]"></div>
         </div>
 
-        <div class="corp-card rounded-2xl overflow-hidden border border-[#00379e]/60">
-          <div class="bg-[#131924] px-4 py-3.5 border-b border-[#232d3d] flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-extrabold uppercase tracking-wider text-white">Espelho / Simulador da Planilha manuntecao.xlsm</span>
-                <span class="px-2 py-0.5 rounded bg-[#090c12] border border-[#232d3d] font-mono-tech text-[10px] text-[#95d324]">Colunas Reais: Início &amp; Fim</span>
-              </div>
-              <p class="text-xs text-[#98989a] mt-0.5">
-                Simule o apontamento do Controlador na planilha: lance um <strong>Início</strong> (sem Fim) para entrada no QHA ou preencha o horário <strong>Fim</strong> para liberar do QHA.
-              </p>
-            </div>
-
-            <form id="form-simulador-xlsm-entrada" class="flex flex-wrap items-center gap-2">
-              <select id="xlsm-nova-frota" class="bg-[#090c12] border border-[#232d3d] rounded-lg px-2.5 py-1.5 text-xs font-mono-tech text-white"></select>
-              <input
-                type="text"
-                id="xlsm-novo-comentario"
-                required
-                placeholder="COMENTÁRIO DA PARADA..."
-                class="bg-[#090c12] border border-[#232d3d] rounded-lg px-2.5 py-1.5 text-xs text-white uppercase w-48"
-              />
-              <button
-                type="submit"
-                class="px-3 py-1.5 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-xs font-bold transition cursor-pointer"
-              >
-                + Gravar Início na Planilha
-              </button>
-            </form>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr class="bg-[#0c1017] border-b border-[#232d3d] font-mono-tech text-[10px] uppercase text-[#98989a]">
-                  <th class="py-2.5 px-3">Frota</th>
-                  <th class="py-2.5 px-3">Categoria</th>
-                  <th class="py-2.5 px-3 text-[#95d324]">Início</th>
-                  <th class="py-2.5 px-3 text-amber-300">Fim</th>
-                  <th class="py-2.5 px-3">Especialidade</th>
-                  <th class="py-2.5 px-3">Executante (Mat.)</th>
-                  <th class="py-2.5 px-3">Horímetro</th>
-                  <th class="py-2.5 px-3">Tipo</th>
-                  <th class="py-2.5 px-3">Comentário</th>
-                  <th class="py-2.5 px-3 text-right">Ação na Planilha</th>
-                </tr>
-              </thead>
-              <tbody id="tbody-simulador-xlsm" class="divide-y divide-[#232d3d] bg-[#10151e]"></tbody>
-            </table>
-          </div>
-        </div>
       </section>
 
       <!-- =================================================================== -->
@@ -905,7 +828,8 @@
           perfil: 'CONTROLADOR',
           sigla: 'CCO',
           abas: [
-            { id: 'pendencias', label: '1. Fila de Pendências (manuntecao.xlsm)' }
+            { id: 'quadro', label: '1. Quadro de Manutenções (QHA)' },
+            { id: 'pendencias', label: '2. Fila de Pendências (CCO)' }
           ]
         },
         admin: {
@@ -941,283 +865,20 @@
         { frota: 'EH726', categoria: 'EQUIPAMENTO MINA', local: 'FRENTE LESTE', horimetro: 8795 }
       ];
 
-      let planilhaXlsmRows = [
-        {
-          rowId: 'ROW-01',
-          frota: 'C1964',
-          categoria: 'EQUIPAMENTO MINA',
-          inicio: '07/11/2026 08:15',
-          fim: '',
-          duracaoMin: 13270.05,
-          especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-          matricula: '1104',
-          executante: 'Marcos Vinícius',
-          horimetro: 21450,
-          tipo: 'Corretiva',
-          local: 'OFICINA FAGUNDES',
-          comentario: 'SERVICO DE SOLDA NO TANQUE DAGUA DO IMPLEMENTO'
-        },
-        {
-          rowId: 'ROW-02',
-          frota: 'C2207',
-          categoria: 'EQUIPAMENTO MINA',
-          inicio: '14/11/2026 10:30',
-          fim: '',
-          duracaoMin: 3048.38,
-          especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-          matricula: '1492',
-          executante: 'Rodrigo Alves',
-          horimetro: 15430,
-          tipo: 'Corretiva',
-          local: 'LIB0750 272 SW',
-          comentario: 'FALHA NOS FREIOS'
-        },
-        {
-          rowId: 'ROW-03',
-          frota: 'C2212',
-          categoria: 'EQUIPAMENTO DRYSTACK',
-          inicio: '13/11/2026 00:25',
-          fim: '',
-          duracaoMin: 5099.68,
-          especialidade: 'MANUTENCAO 206 MANUTENCAO CORRETIVA ELETRICA',
-          matricula: '1219',
-          executante: 'Anderson Lima',
-          horimetro: 14980,
-          tipo: 'Corretiva',
-          local: 'FILTRO PRENSA',
-          comentario: 'SUBSTITUICAO DA CAIXA DE CAMBIO'
-        },
-        {
-          rowId: 'ROW-04',
-          frota: 'C2330',
-          categoria: 'EQUIPAMENTO ALIMENTACAO',
-          inicio: '12/11/2026 06:50',
-          fim: '',
-          duracaoMin: 6148.17,
-          especialidade: 'MANUTENCAO 207 MANUTENCAO PREVENTIVA',
-          matricula: '1328',
-          executante: 'Clecio Ribeiro dos Santos',
-          horimetro: 12300,
-          tipo: 'Preventiva',
-          local: 'BRITAGEM',
-          comentario: 'PREVENTIVA'
-        },
-        {
-          rowId: 'ROW-05',
-          frota: 'CR54',
-          categoria: 'EQUIPAMENTO INFRA',
-          inicio: '03/11/2026 23:20',
-          fim: '',
-          duracaoMin: 18120.18,
-          especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-          matricula: '1104',
-          executante: 'Marcos Vinícius',
-          horimetro: 18750,
-          tipo: 'Corretiva',
-          local: 'PCH47',
-          comentario: 'FALHA NOS FREIOS'
-        },
-        {
-          rowId: 'ROW-06',
-          frota: 'EH003',
-          categoria: 'EQUIPAMENTO AUXILIAR',
-          inicio: '15/11/2026 20:00',
-          fim: '',
-          duracaoMin: 1039.83,
-          especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-          matricula: '1492',
-          executante: 'Rodrigo Alves',
-          horimetro: 11200,
-          tipo: 'Corretiva',
-          local: 'PÁTIO APOIO',
-          comentario: 'TROCA DE CONCHA'
-        },
-        {
-          rowId: 'ROW-07',
-          frota: 'EH697',
-          categoria: 'EQUIPAMENTO MINA',
-          inicio: '26/10/2026 12:50',
-          fim: '',
-          duracaoMin: 30271.83,
-          especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-          matricula: '1328',
-          executante: 'Clecio Ribeiro dos Santos',
-          horimetro: 14820,
-          tipo: 'Corretiva',
-          local: 'OFICINA FAGUNDES',
-          comentario: 'PONTEIRA DO MARTELO QUEBRADO'
-        },
-        {
-          rowId: 'ROW-08',
-          frota: 'EH720',
-          categoria: 'EQUIPAMENTO DRYSTACK',
-          inicio: '08/11/2026 12:25',
-          fim: '',
-          duracaoMin: 11576.22,
-          especialidade: 'MANUTENCAO 214 MANUTENCAO AR CONDICIONADO',
-          matricula: '1219',
-          executante: 'Anderson Lima',
-          horimetro: 9410,
-          tipo: 'Corretiva',
-          local: 'FILTRO PRENSA',
-          comentario: 'AR CONDICIONADO'
-        }
-      ];
+      let planilhaXlsmRows = [];
 
-      let ordensServico = [
-        {
-          id: 'OS-1041',
-          frota: 'EH697',
-          tipo: 'Corretiva',
-          especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-          descricao: 'PONTEIRA DO MARTELO QUEBRADO E VAZAMENTO NO BLOCO HIDRÁULICO',
-          mecanico: 'Clecio Ribeiro dos Santos (Mat. 1328)',
-          status: 'EM_EXECUCAO',
-          abertura: '16/11/2026 07:40',
-          foto: gerarSvgEvidencia('EH697', 'Corretiva', 'PONTEIRA DO MARTELO QUEBRADO')
-        },
-        {
-          id: 'OS-1042',
-          frota: 'C2205',
-          tipo: 'Corretiva',
-          especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-          descricao: 'COMANDO DE VALVULA TRAVANDO AO BASULAR CARGA',
-          mecanico: 'Clecio Ribeiro dos Santos (Mat. 1328)',
-          status: 'DESTINADA',
-          abertura: '16/11/2026 11:15',
-          foto: gerarSvgEvidencia('C2205', 'Corretiva', 'COMANDO DE VALVULA TRAVANDO')
-        },
-        {
-          id: 'OS-1043',
-          frota: 'C2330',
-          tipo: 'Preventiva',
-          especialidade: 'MANUTENCAO 207 MANUTENCAO PREVENTIVA',
-          descricao: 'PREVENTIVA 500H • TROCA DE ELEMENTOS FILTRANTES E LUBRIFICAÇÃO',
-          mecanico: 'Clecio Ribeiro dos Santos (Mat. 1328)',
-          status: 'DESTINADA',
-          abertura: '16/11/2026 12:05',
-          foto: null
-        }
-      ];
+      let ordensServico = [];
 
-      let filaPendencias = [
-        {
-          id: 'PEND-901',
-          osId: 'OS-1042',
-          frota: 'C2205',
-          tipoPendencia: 'ENTRADA',
-          motivo: 'OS aberta pelo Encarregado • Aguardando apontamento de "Início" em manuntecao.xlsm',
-          solicitante: 'Encarregado de Oficina',
-          criadoEm: '16/11/2026 11:15'
-        },
-        {
-          id: 'PEND-902',
-          osId: 'OS-1039',
-          frota: 'EH720',
-          tipoPendencia: 'BAIXA',
-          motivo: 'Serviço concluído na oficina • Aguardando preenchimento da coluna "Fim" em manuntecao.xlsm para liberar do QHA',
-          solicitante: 'Clecio Ribeiro dos Santos (Mat. 1328)',
-          criadoEm: '16/11/2026 12:30'
-        }
-      ];
+      let filaPendencias = [];
 
-      let historicoTecnicoDB = {
-        EH697: [
-          {
-            osCode: 'OS-0988',
-            data: '02/11/2026 14:20',
-            horimetro: 14690,
-            tipo: 'Corretiva',
-            especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-            falha: 'Queda de pressão no comando do braço hidráulico.',
-            servico: 'Substituída válvula de alívio principal e purga da linha piloto.',
-            pecas: 'Válvula alívio CAT 349-1182, O-rings viton',
-            executante: 'Clecio Ribeiro dos Santos (Mat. 1328)'
-          },
-          {
-            osCode: 'OS-0941',
-            data: '18/10/2026 09:45',
-            horimetro: 14500,
-            tipo: 'Preventiva',
-            especialidade: 'MANUTENCAO 207 MANUTENCAO PREVENTIVA',
-            falha: 'Revisão Preventiva Programada 500h.',
-            servico: 'Troca completa de filtros hidráulicos, combustível e óleo motor.',
-            pecas: 'Kit Filtros 500h CAT 336, Óleo 15W40',
-            executante: 'Marcos Vinícius (Mat. 1104)'
-          }
-        ],
-        C2205: [
-          {
-            osCode: 'OS-0972',
-            data: '25/10/2026 16:10',
-            horimetro: 15610,
-            tipo: 'Corretiva',
-            especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-            falha: 'Vazamento na linha de retorno da báscula.',
-            servico: 'Substituída mangueira hidráulica de 1" e conexões JIC.',
-            pecas: 'Mangueira 1" 4SH, Conexões JIC',
-            executante: 'Clecio Ribeiro dos Santos (Mat. 1328)'
-          }
-        ],
-        EH720: [
-          {
-            osCode: 'OS-0960',
-            data: '21/10/2026 11:00',
-            horimetro: 9290,
-            tipo: 'Preventiva',
-            especialidade: 'MANUTENCAO 207 MANUTENCAO PREVENTIVA',
-            falha: 'Inspeção Preventiva 250h.',
-            servico: 'Limpeza de filtros de cabine, reaperto geral e lubrificação.',
-            pecas: 'Filtro Cabine Komatsu PC350',
-            executante: 'Anderson Lima (Mat. 1219)'
-          }
-        ],
-        C1964: [
-          {
-            osCode: 'OS-0955',
-            data: '15/10/2026 13:30',
-            horimetro: 21100,
-            tipo: 'Corretiva',
-            especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-            falha: 'Trinca no suporte traseiro do tanque pipa.',
-            servico: 'Reforço estrutural com chapa 3/8 e solda MIG.',
-            pecas: 'Chapa aço A36, Eletrodo E7018',
-            executante: 'Rodrigo Alves (Mat. 1492)'
-          }
-        ]
-      };
-
-      const INTERVALO_VARREDURA_S = 120;
-
-      function mostrarStatusSync(ok, texto) {
-        let el = document.getElementById('faixa-status-sync');
-        if (!el) {
-          el = document.createElement('div');
-          el.id = 'faixa-status-sync';
-          el.style.cssText = 'position:sticky;top:0;z-index:60;padding:8px 14px;font:700 12px Inter,sans-serif;text-align:center;';
-          document.body.insertBefore(el, document.body.firstChild);
-        }
-        el.style.background = ok ? '#14301a' : '#7a1212';
-        el.style.color = ok ? '#95d324' : '#ffffff';
-        el.style.borderBottom = ok ? '1px solid #95d324' : '1px solid #ff6b6b';
-        el.textContent = ok ? texto : '⚠ DADOS DE EXEMPLO (planilha NÃO carregada) — ' + texto;
-      }
-
-      function escapeHtml(v) {
-        return String(v === undefined || v === null ? '' : v)
-          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-      }
+      let historicoTecnicoDB = {};
 
       let estado = {
         usuarioAtual: null,
         abaAtiva: 'quadro',
-        qhaCategoriaFiltro: 'TODAS',
         linhaQhaSelecionada: null,
         fotoAnexadaDataUrl: null,
-        segundosRestantesVarredura: INTERVALO_VARREDURA_S,
-        planilhaReal: false,
-        liberadasPendentes: []
+        segundosRestantesVarredura: 600
       };
 
       // =====================================================================
@@ -1226,82 +887,44 @@
       async function sincronizarComPlanilhaRealDrive(notificar = false) {
         try {
           const res = await fetch('/api/em-manutencao');
-          let data = null;
-          try { data = await res.json(); } catch (e) { data = null; }
-
-          if (!res.ok || !data || data.erro || !Array.isArray(data.equipamentos)) {
-            const motivo = (data && (data.erro || data.aviso)) || `o servidor respondeu HTTP ${res.status} sem detalhes`;
-            mostrarStatusSync(false, motivo);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && Array.isArray(data.equipamentos) && data.equipamentos.length > 0) {
+            planilhaXlsmRows = data.equipamentos.map((eq, idx) => {
+              const catInfo = CATALOGO_FROTAS.find((f) => f.frota === eq.equipamento) || {
+                categoria: 'EQUIPAMENTO MINA',
+                local: eq.local || 'OFICINA FAGUNDES',
+                horimetro: 15000
+              };
+              return {
+                rowId: `DRIVE-${idx + 1}`,
+                frota: eq.equipamento,
+                categoria: catInfo.categoria,
+                inicio: eq.inicio,
+                fim: '',
+                duracaoMin: eq.duracaoMin !== undefined ? eq.duracaoMin : 120.0,
+                especialidade: eq.especialidade || 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
+                matricula: eq.matricula && eq.matricula !== '-' ? eq.matricula : '',
+                executante: eq.mecanico || '-',
+                horimetro: eq.horimetro && eq.horimetro !== '-' ? eq.horimetro : (catInfo.horimetro || '-'),
+                tipo: eq.tipo || 'Corretiva',
+                local: eq.local || catInfo.local,
+                comentario: eq.motivo || 'EM MANUTENÇÃO'
+              };
+            });
+            renderizarTudo();
+            popularSelectsFrota();
             if (notificar) {
-              mostrarToast('Falha na Sincronização', motivo, 'warning');
+              mostrarToast('Planilha Sincronizada', `${data.equipamentos.length} ativo(s) carregado(s) de manuntecao.xlsm.`, 'success');
             }
-            return false;
+            executarVarreduraPlanilha(false);
+          } else if (notificar) {
+            mostrarToast('Sincronização Drive', 'Planilha verificada (nenhuma linha ativa retornada no momento).', 'info');
           }
-          if (data.aviso) {
-            mostrarStatusSync(false, data.aviso);
-            return false;
-          }
-
-          const abertos = data.equipamentos;
-          const encerrados = Array.isArray(data.encerrados_recentes) ? data.encerrados_recentes : [];
-
-          // frotas que estavam abertas na leitura anterior (só vale depois da 1ª leitura real)
-          const anteriores = estado.planilhaReal
-            ? planilhaXlsmRows.filter((r) => r.fim.trim() === '').map((r) => r.frota)
-            : [];
-
-          const mapear = (eq, prefixo, idx) => ({
-            rowId: `${prefixo}-${idx + 1}`,
-            frota: String(eq.equipamento || '').trim(),
-            categoria: eq.categoria || 'EQUIPAMENTO MINA',
-            inicio: eq.inicio || '',
-            fim: eq.fim || '',
-            duracaoMin: Number(eq.duracao_min) || 0,
-            especialidade: eq.especialidade || 'MANUTENÇÃO',
-            matricula: eq.matricula || '-',
-            executante: eq.mecanico || '-',
-            horimetro: eq.horimetro || '-',
-            tipo: eq.tipo || 'Corretiva',
-            local: eq.local || '',
-            comentario: eq.motivo || ''
-          });
-
-          planilhaXlsmRows = abertos.map((e, i) => mapear(e, 'DRIVE', i))
-            .concat(encerrados.map((e, i) => mapear(e, 'ENC', i)));
-
-          // frotas novas entram no catálogo (listas de seleção de OS)
-          planilhaXlsmRows.forEach((r) => {
-            if (r.frota && !CATALOGO_FROTAS.some((f) => f.frota === r.frota)) {
-              CATALOGO_FROTAS.push({
-                frota: r.frota,
-                categoria: r.categoria,
-                local: r.local || '',
-                horimetro: Number(r.horimetro) || 0
-              });
-            }
-          });
-          popularSelectsFrota();
-
-          // equipamento que saiu da lista de abertos = liberado
-          const abertosAgora = new Set(abertos.map((e) => String(e.equipamento || '').trim()));
-          estado.liberadasPendentes = Array.from(new Set(anteriores.filter((f) => !abertosAgora.has(f))));
-          estado.planilhaReal = true;
-
-          mostrarStatusSync(true, `Planilha real carregada: ${abertos.length} em manutenção • atualizado às ${horaAtualSegundos()}`);
-          if (notificar) {
-            mostrarToast('Planilha Sincronizada', `${abertos.length} ativo(s) em manutenção carregado(s) de manuntecao.xlsm.`, 'success');
-          }
-          executarVarreduraPlanilha(false);
-          return true;
         } catch (err) {
-          mostrarStatusSync(false, 'não foi possível falar com o servidor (' + (err && err.message ? err.message : 'sem conexão') + ')');
           if (notificar) {
             mostrarToast('Modo Local Ativo', 'Operando com base local enquanto o servidor não responde.', 'warning');
           }
-          return false;
-        } finally {
-          estado.segundosRestantesVarredura = INTERVALO_VARREDURA_S;
-          atualizarDisplayTimer10m();
         }
       }
 
@@ -1315,14 +938,9 @@
           });
           if (res.ok) {
             mostrarToast('Google Drive Atualizado', `Log de ${tipo.toUpperCase()} e arquivo .xlsx salvos na pasta Logs_Manutencao.`, 'success');
-          } else {
-            let msg = 'Log não gravado no Drive.';
-            try { const d = await res.json(); if (d && d.erro) msg = d.erro; } catch (e) { /* sem corpo JSON */ }
-            mostrarToast('Log NÃO gravado', msg, 'warning');
           }
         } catch (err) {
           console.warn('Falha ao gravar no backend:', err);
-          mostrarToast('Log NÃO gravado', 'Servidor indisponível.', 'warning');
         }
       }
 
@@ -1384,8 +1002,8 @@
         const el = document.createElement('div');
         el.className = `pointer-events-auto bg-[#161d29] border border-[#232d3d] border-l-4 ${borda} rounded-xl p-3.5 shadow-2xl transition-all duration-300`;
         el.innerHTML = `
-          <div class="text-xs font-bold text-white">${escapeHtml(titulo)}</div>
-          <div class="text-[11px] text-[#98989a] mt-0.5 leading-snug">${escapeHtml(mensagem)}</div>
+          <div class="text-xs font-bold text-white">${titulo}</div>
+          <div class="text-[11px] text-[#98989a] mt-0.5 leading-snug">${mensagem}</div>
         `;
         container.appendChild(el);
         setTimeout(() => {
@@ -1404,6 +1022,15 @@
         return new Date().toLocaleTimeString('pt-BR');
       }
 
+      // Converte "DD/MM/YYYY HH:MM" → timestamp numérico (0 se inválido)
+      function parsePtBrDataTs(str) {
+        if (!str) return 0;
+        // "DD/MM/YYYY HH:MM"
+        const m = str.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+        if (!m) return 0;
+        return new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5]).getTime();
+      }
+
       function executarVarreduraPlanilha(origemManual = false) {
         let removidasEntrada = [];
         let removidasBaixa = [];
@@ -1412,8 +1039,16 @@
           const linhasFrota = planilhaXlsmRows.filter((r) => r.frota === pend.frota);
 
           if (pend.tipoPendencia === 'ENTRADA') {
-            const jaLancadaComInicio = linhasFrota.some((r) => r.inicio.trim() !== '' && r.fim.trim() === '');
-            if (jaLancadaComInicio) {
+            // Só remove se aparecer um "início" na planilha que seja POSTERIOR
+            // ao momento em que a OS foi emitida (evita remover pendência logo
+            // porque a frota já estava no QHA antes da OS ser criada)
+            const tsOs = pend.criadoEmTs || 0;
+            const novaEntrada = linhasFrota.some((r) => {
+              if (r.inicio.trim() === '' || r.fim.trim() !== '') return false;
+              const tsInicio = parsePtBrDataTs(r.inicio);
+              return tsInicio >= tsOs;
+            });
+            if (novaEntrada) {
               removidasEntrada.push(pend.frota);
               return false;
             }
@@ -1421,10 +1056,17 @@
           }
 
           if (pend.tipoPendencia === 'BAIXA') {
+            // Remove quando a frota já não tiver mais linha sem "fim"
+            // E houver ao menos uma linha com "fim" posterior à criação da pendência
+            const tsOs = pend.criadoEmTs || 0;
             const aindaTemLinhaSemFim = linhasFrota.some((r) => r.inicio.trim() !== '' && r.fim.trim() === '');
-            const temLinhaComFim = linhasFrota.some((r) => r.fim.trim() !== '');
+            const temFimNovo = linhasFrota.some((r) => {
+              if (r.fim.trim() === '') return false;
+              const tsFim = parsePtBrDataTs(r.fim);
+              return tsFim >= tsOs;
+            });
 
-            if (!aindaTemLinhaSemFim && (temLinhaComFim || estado.planilhaReal)) {
+            if (!aindaTemLinhaSemFim && temFimNovo) {
               removidasBaixa.push(pend.frota);
               return false;
             }
@@ -1434,15 +1076,9 @@
           return true;
         });
 
-        // equipamentos que saíram da lista de abertos na última leitura também disparam o alerta
-        (estado.liberadasPendentes || []).forEach((f) => {
-          if (!removidasBaixa.includes(f)) removidasBaixa.push(f);
-        });
-        estado.liberadasPendentes = [];
-
         const kpiSync = document.getElementById('kpi-ultima-atualizacao');
         if (kpiSync) kpiSync.textContent = horaAtualSegundos();
-        estado.segundosRestantesVarredura = INTERVALO_VARREDURA_S;
+        estado.segundosRestantesVarredura = 600;
         atualizarDisplayTimer10m();
 
         renderizarTudo();
@@ -1490,12 +1126,10 @@
         const busca = (document.getElementById('qha-busca-texto')?.value || '').trim().toUpperCase();
 
         const filtrados = ativosNaPlanilha.filter((row) => {
-          const matchCat = estado.qhaCategoriaFiltro === 'TODAS' || row.categoria === estado.qhaCategoriaFiltro;
-          const matchBusca = !busca ||
+          return !busca ||
             row.frota.toUpperCase().includes(busca) ||
             row.especialidade.toUpperCase().includes(busca) ||
             row.comentario.toUpperCase().includes(busca);
-          return matchCat && matchBusca;
         });
 
         const contadorEl = document.getElementById('qha-contador-filtrado');
@@ -1518,13 +1152,13 @@
           const durHoras = (Number(row.duracaoMin) / 60).toFixed(2);
 
           return `
-            <tr data-qha-frota="${escapeHtml(row.frota)}" class="${isSelected ? 'linha-selecionada' : ''}" title="Clique para abrir o Histórico Técnico de ${escapeHtml(row.frota)}">
-              <td class="font-bold font-mono-tech">${escapeHtml(row.frota)}</td>
+            <tr data-qha-frota="${row.frota}" class="${isSelected ? 'linha-selecionada' : ''}" title="Clique para abrir o Histórico Técnico de ${row.frota}">
+              <td class="font-bold font-mono-tech">${row.frota}</td>
               <td class="celula-vermelha-qha">MANUTENÇÃO</td>
-              <td class="celula-vermelha-qha">${escapeHtml(row.especialidade)}</td>
+              <td class="celula-vermelha-qha">${row.especialidade}</td>
               <td class="font-mono-tech">${durMin}</td>
               <td class="font-mono-tech">${durHoras}</td>
-              <td class="uppercase">${escapeHtml(row.comentario)}</td>
+              <td class="uppercase">${row.comentario}</td>
             </tr>
           `;
         }).join('');
@@ -1572,24 +1206,24 @@
 
           return `
             <tr class="hover:bg-[#161d29] transition">
-              <td class="py-3 px-3.5 font-mono-tech font-bold text-[#95d324] whitespace-nowrap">${escapeHtml(os.id)}</td>
+              <td class="py-3 px-3.5 font-mono-tech font-bold text-[#95d324] whitespace-nowrap">${os.id}</td>
               <td class="py-3 px-3.5 whitespace-nowrap">
-                <span class="px-2.5 py-1 rounded bg-[#00379e] text-white font-mono-tech font-extrabold text-xs">${escapeHtml(os.frota)}</span>
+                <span class="px-2.5 py-1 rounded bg-[#00379e] text-white font-mono-tech font-extrabold text-xs">${os.frota}</span>
               </td>
               <td class="py-3 px-3.5 whitespace-nowrap">
-                <span class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${tipoClass}">${escapeHtml(os.tipo)}</span>
+                <span class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${tipoClass}">${os.tipo}</span>
               </td>
-              <td class="py-3 px-3.5 text-neutral-300 font-medium whitespace-nowrap">${escapeHtml(os.especialidade.replace(/^MANUTEN[CÇ][AÃ]O\s+\d+\s+/i, ''))}</td>
-              <td class="py-3 px-3.5 text-white font-medium max-w-xs truncate" title="${escapeHtml(os.descricao)}">${escapeHtml(os.descricao)}</td>
+              <td class="py-3 px-3.5 text-neutral-300 font-medium whitespace-nowrap">${os.especialidade.replace(/^MANUTEN[CÇ][AÃ]O\s+\d+\s+/i, '')}</td>
+              <td class="py-3 px-3.5 text-white font-medium max-w-xs truncate" title="${os.descricao}">${os.descricao}</td>
               <td class="py-3 px-3.5 whitespace-nowrap">${statusBadge}</td>
               <td class="py-3 px-3.5 text-right whitespace-nowrap">
                 <div class="inline-flex items-center justify-end gap-1.5">
                   <button
                     type="button"
                     data-acao="abrir-historico"
-                    data-frota="${escapeHtml(os.frota)}"
+                    data-frota="${os.frota}"
                     class="px-2.5 py-1.5 rounded-lg bg-[#161d29] hover:bg-[#1f293a] border border-[#00379e] text-blue-200 hover:text-white text-[11px] font-bold transition cursor-pointer"
-                    title="Consultar Histórico Técnico de ${escapeHtml(os.frota)}"
+                    title="Consultar Histórico Técnico de ${os.frota}"
                   >
                     📋 Histórico (${histCount})
                   </button>
@@ -1598,7 +1232,7 @@
                     <button
                       type="button"
                       data-acao="ver-foto"
-                      data-os-id="${escapeHtml(os.id)}"
+                      data-os-id="${os.id}"
                       class="px-2.5 py-1.5 rounded-lg bg-[#161d29] hover:bg-[#232d3d] border border-[#232d3d] text-neutral-200 text-[11px] font-semibold transition cursor-pointer"
                     >
                       📷 Foto
@@ -1609,7 +1243,7 @@
                     <button
                       type="button"
                       data-acao="iniciar-os"
-                      data-os-id="${escapeHtml(os.id)}"
+                      data-os-id="${os.id}"
                       class="px-3 py-1.5 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-[11px] font-bold transition cursor-pointer"
                     >
                       ▶ Iniciar
@@ -1618,7 +1252,7 @@
                     <button
                       type="button"
                       data-acao="abrir-finalizar"
-                      data-os-id="${escapeHtml(os.id)}"
+                      data-os-id="${os.id}"
                       class="px-3 py-1.5 rounded-lg bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] text-[11px] font-extrabold transition cursor-pointer"
                     >
                       ✓ Finalizar
@@ -1650,14 +1284,14 @@
             <div class="bg-[#161d29] border border-[#232d3d] rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div class="space-y-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span class="px-2 py-0.5 rounded bg-[#00379e] text-white font-mono-tech font-bold text-xs">${escapeHtml(os.frota)}</span>
-                  <span class="font-mono-tech text-xs text-[#98989a]">${escapeHtml(os.id)}</span>
-                  <span class="text-[11px] font-bold ${os.tipo === 'Corretiva' ? 'text-rose-400' : 'text-[#95d324]'}">${escapeHtml(os.tipo)}</span>
+                  <span class="px-2 py-0.5 rounded bg-[#00379e] text-white font-mono-tech font-bold text-xs">${os.frota}</span>
+                  <span class="font-mono-tech text-xs text-[#98989a]">${os.id}</span>
+                  <span class="text-[11px] font-bold ${os.tipo === 'Corretiva' ? 'text-rose-400' : 'text-[#95d324]'}">${os.tipo}</span>
                   ${statusMap[os.status] || ''}
                 </div>
-                <div class="text-xs font-bold text-white truncate">${escapeHtml(os.descricao)}</div>
+                <div class="text-xs font-bold text-white truncate">${os.descricao}</div>
                 <div class="text-[11px] text-[#98989a] font-mono-tech">
-                  Mecânico: <span class="text-neutral-200">${escapeHtml(os.mecanico)}</span> • Abertura: ${escapeHtml(os.abertura)}
+                  Mecânico: <span class="text-neutral-200">${os.mecanico}</span> • Abertura: ${os.abertura}
                 </div>
               </div>
 
@@ -1665,7 +1299,7 @@
                 <button
                   type="button"
                   data-acao="abrir-historico"
-                  data-frota="${escapeHtml(os.frota)}"
+                  data-frota="${os.frota}"
                   class="px-3 py-1.5 rounded-lg bg-[#10151e] hover:bg-[#00379e] border border-[#232d3d] text-xs font-bold text-blue-200 hover:text-white transition cursor-pointer"
                 >
                   📋 Histórico (${histCount})
@@ -1674,7 +1308,7 @@
                   <button
                     type="button"
                     data-acao="ver-foto"
-                    data-os-id="${escapeHtml(os.id)}"
+                    data-os-id="${os.id}"
                     class="px-2.5 py-1.5 rounded-lg bg-[#10151e] hover:bg-[#232d3d] border border-[#232d3d] text-xs text-neutral-200 cursor-pointer"
                   >
                     📷
@@ -1714,13 +1348,13 @@
                 <div class="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-[#161d29]/60 transition">
                   <div class="space-y-1">
                     <div class="flex items-center gap-2 flex-wrap">
-                      <span class="px-2.5 py-0.5 rounded bg-[#00379e] text-white font-mono-tech font-extrabold text-xs">${escapeHtml(p.frota)}</span>
-                      <span class="font-mono-tech text-xs text-[#98989a]">${escapeHtml(p.osId)}</span>
+                      <span class="px-2.5 py-0.5 rounded bg-[#00379e] text-white font-mono-tech font-extrabold text-xs">${p.frota}</span>
+                      <span class="font-mono-tech text-xs text-[#98989a]">${p.osId}</span>
                       ${badgeTipo}
                     </div>
-                    <p class="text-xs font-semibold text-white">${escapeHtml(p.motivo)}</p>
+                    <p class="text-xs font-semibold text-white">${p.motivo}</p>
                     <div class="text-[11px] text-[#98989a] font-mono-tech">
-                      Origem: ${escapeHtml(p.solicitante)} • Registrado em: ${escapeHtml(p.criadoEm)}
+                      Origem: ${p.solicitante} • Registrado em: ${p.criadoEm}
                     </div>
                   </div>
                   <div class="text-right shrink-0">
@@ -1740,23 +1374,23 @@
             const semFim = row.fim.trim() === '';
             return `
               <tr class="hover:bg-[#161d29] transition">
-                <td class="py-2.5 px-3 font-mono-tech font-bold text-white">${escapeHtml(row.frota)}</td>
-                <td class="py-2.5 px-3 text-[11px] text-[#98989a]">${escapeHtml(row.categoria.replace('EQUIPAMENTO ', ''))}</td>
-                <td class="py-2.5 px-3 font-mono-tech text-[#95d324] whitespace-nowrap">${escapeHtml(row.inicio)}</td>
+                <td class="py-2.5 px-3 font-mono-tech font-bold text-white">${row.frota}</td>
+                <td class="py-2.5 px-3 text-[11px] text-[#98989a]">${row.categoria.replace('EQUIPAMENTO ', '')}</td>
+                <td class="py-2.5 px-3 font-mono-tech text-[#95d324] whitespace-nowrap">${row.inicio}</td>
                 <td class="py-2.5 px-3 font-mono-tech whitespace-nowrap ${semFim ? 'text-amber-300 font-bold' : 'text-neutral-300'}">
-                  ${semFim ? 'VAZIO (ATIVO NO QHA)' : escapeHtml(row.fim)}
+                  ${semFim ? 'VAZIO (ATIVO NO QHA)' : row.fim}
                 </td>
-                <td class="py-2.5 px-3 text-[11px] text-neutral-300 max-w-[200px] truncate">${escapeHtml(row.especialidade)}</td>
-                <td class="py-2.5 px-3 text-[11px] text-neutral-300 whitespace-nowrap">${escapeHtml(row.executante)} (${escapeHtml(row.matricula)})</td>
-                <td class="py-2.5 px-3 font-mono-tech text-neutral-300">${row.horimetro === '-' ? '-' : escapeHtml(row.horimetro) + 'h'}</td>
-                <td class="py-2.5 px-3 text-[11px]">${escapeHtml(row.tipo)}</td>
-                <td class="py-2.5 px-3 text-[11px] text-white uppercase max-w-[180px] truncate">${escapeHtml(row.comentario)}</td>
+                <td class="py-2.5 px-3 text-[11px] text-neutral-300 max-w-[200px] truncate">${row.especialidade}</td>
+                <td class="py-2.5 px-3 text-[11px] text-neutral-300 whitespace-nowrap">${row.executante}${row.matricula ? ` (${row.matricula})` : ''}</td>
+                <td class="py-2.5 px-3 font-mono-tech text-neutral-300">${row.horimetro !== '-' ? row.horimetro + 'h' : '-'}</td>
+                <td class="py-2.5 px-3 text-[11px]">${row.tipo}</td>
+                <td class="py-2.5 px-3 text-[11px] text-white uppercase max-w-[180px] truncate">${row.comentario}</td>
                 <td class="py-2.5 px-3 text-right whitespace-nowrap">
                   ${semFim ? `
                     <button
                       type="button"
                       data-acao="preencher-fim-xlsm"
-                      data-row-id="${escapeHtml(row.rowId)}"
+                      data-row-id="${row.rowId}"
                       class="px-2.5 py-1 rounded bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] font-extrabold text-[11px] transition cursor-pointer"
                     >
                       Preencher Fim Agora
@@ -1771,50 +1405,54 @@
         }
       }
 
-      function abrirModalHistorico(frota) {
+      async function abrirModalHistorico(frota) {
         estado.linhaQhaSelecionada = frota;
         renderizarQuadroQHA();
 
-        const catInfo = CATALOGO_FROTAS.find((f) => f.frota === frota);
-        const registros = historicoTecnicoDB[frota] || [];
+        document.getElementById("modal-hist-frota").textContent = frota;
+        document.getElementById("modal-hist-titulo").textContent = "Histórico Técnico • " + frota;
+        document.getElementById("modal-hist-subtitulo").textContent = "Consultando manutenções encerradas da máquina...";
 
-        document.getElementById('modal-hist-frota').textContent = frota;
-        document.getElementById('modal-hist-titulo').textContent = `Histórico Técnico • Frota ${escapeHtml(frota)}`;
-        document.getElementById('modal-hist-subtitulo').textContent = catInfo
-          ? `${catInfo.categoria} • Horímetro Base: ${catInfo.horimetro}h • ${registros.length} intervenção(ões)`
-          : `${registros.length} intervenção(ões) registrada(s)`;
+        const corpo = document.getElementById("modal-hist-corpo");
+        corpo.innerHTML = "<div class=\"p-6 text-center text-xs text-[#98989a]\">Buscando histórico real em manuntecao.xlsm...</div>";
 
-        const corpo = document.getElementById('modal-hist-corpo');
-        if (registros.length === 0) {
-          corpo.innerHTML = `
-            <div class="bg-[#161d29] border border-[#232d3d] rounded-xl p-6 text-center">
-              <div class="text-sm font-bold text-white">Nenhum histórico encerrado anterior para ${escapeHtml(frota)}</div>
-              <p class="text-xs text-[#98989a] mt-1">Assim que uma OS for finalizada, ela será gravada automaticamente nesta ficha.</p>
-            </div>
-          `;
-        } else {
-          corpo.innerHTML = registros.map((reg, i) => `
-            <div class="relative pl-5 border-l-2 ${i === 0 ? 'border-[#95d324]' : 'border-[#00379e]'} space-y-1.5">
-              <span class="absolute -left-[7px] top-1 w-3 h-3 rounded-full ${i === 0 ? 'bg-[#95d324]' : 'bg-[#00379e]'} border-2 border-[#10151e]"></span>
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center gap-2">
-                  <span class="font-mono-tech text-xs font-bold text-white">${escapeHtml(reg.osCode)}</span>
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold ${reg.tipo === 'Corretiva' ? 'bg-rose-500/20 text-rose-300' : 'bg-[#95d324]/20 text-[#95d324]'}">${escapeHtml(reg.tipo)}</span>
-                </div>
-                <span class="font-mono-tech text-[11px] text-[#98989a]">${escapeHtml(reg.data)} • <strong class="text-white">${escapeHtml(reg.horimetro)}h</strong></span>
-              </div>
-              <div class="text-xs text-neutral-300"><strong>Falha:</strong> ${escapeHtml(reg.falha)}</div>
-              <div class="bg-[#161d29] border border-[#232d3d] rounded-lg p-2.5 text-xs space-y-1">
-                <div class="text-white"><strong class="text-[#95d324]">Serviço:</strong> ${escapeHtml(reg.servico)}</div>
-                <div class="text-[11px] text-[#98989a]">Peças: <span class="text-neutral-200">${escapeHtml(reg.pecas)}</span> • Exec.: <span class="text-blue-300">${escapeHtml(reg.executante)}</span></div>
-              </div>
-            </div>
-          `).join('');
+        const modal = document.getElementById("modal-historico");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+
+        try {
+          const res = await fetch("/api/historico/" + encodeURIComponent(frota));
+          const data = await res.json();
+          const registros = (data && data.registros) || [];
+
+          document.getElementById("modal-hist-subtitulo").textContent = registros.length + " intervenção(ões) com início e fim concluídos";
+
+          if (registros.length === 0) {
+            corpo.innerHTML = "<div class=\"bg-[#161d29] border border-[#232d3d] rounded-xl p-6 text-center\"><div class=\"text-sm font-bold text-white\">Nenhum histórico com horário Fim encontrado para " + frota + "</div></div>";
+            return;
+          }
+
+          corpo.innerHTML = registros.map((reg, i) => {
+            const corBorda = i === 0 ? "border-[#95d324]" : "border-[#00379e]";
+            const corDot = i === 0 ? "bg-[#95d324]" : "bg-[#00379e]";
+            return "<div class=\"relative pl-5 border-l-2 " + corBorda + " space-y-1.5\">" +
+              "<span class=\"absolute -left-[7px] top-1 w-3 h-3 rounded-full " + corDot + " border-2 border-[#10151e]\"></span>" +
+              "<div class=\"flex flex-wrap items-center justify-between gap-2\">" +
+                "<div class=\"flex items-center gap-2\">" +
+                  "<span class=\"font-mono-tech text-xs font-bold text-[#95d324]\">" + (reg.tipo || "Corretiva") + "</span>" +
+                  "<span class=\"text-xs text-neutral-300 font-semibold\">" + (reg.especialidade || "MANUTENÇÃO") + "</span>" +
+                "</div>" +
+                "<span class=\"font-mono-tech text-[11px] text-[#98989a]\">" + reg.inicio + " → <strong class=\"text-white\">" + reg.fim + "</strong></span>" +
+              "</div>" +
+              "<div class=\"text-xs text-white\"><strong>Motivo:</strong> " + reg.falha + "</div>" +
+              "<div class=\"bg-[#161d29] border border-[#232d3d] rounded-lg p-2.5 text-xs text-[#98989a]\">" +
+                "Executante: <span class=\"text-blue-300\">" + reg.executante + "</span> • Duração: <span class=\"text-white font-mono-tech\">" + reg.duracaoMin + " min</span>" +
+              "</div>" +
+            "</div>";
+          }).join("");
+        } catch (err) {
+          corpo.innerHTML = "<div class=\"p-6 text-center text-xs text-rose-400\">Falha ao buscar histórico técnico no servidor.</div>";
         }
-
-        const modal = document.getElementById('modal-historico');
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
       }
 
       function fecharModalHistorico() {
@@ -1886,13 +1524,20 @@
       }
 
       function popularSelectsFrota() {
+        // Usa equipamentos reais da planilha se já carregados; senão usa catálogo fixo
         const selOs = document.getElementById('os-frota');
-        const selXlsm = document.getElementById('xlsm-nova-frota');
-        const optionsHtml = CATALOGO_FROTAS.map(
-          (f) => `<option value="${escapeHtml(f.frota)}">${escapeHtml(f.frota)} (${escapeHtml(f.categoria.replace('EQUIPAMENTO ', ''))})</option>`
-        ).join('');
+        const frotas = planilhaXlsmRows.length > 0
+          ? planilhaXlsmRows.map((r) => ({ frota: r.frota, cat: r.categoria.replace('EQUIPAMENTO ', '') }))
+          : CATALOGO_FROTAS.map((f) => ({ frota: f.frota, cat: f.categoria.replace('EQUIPAMENTO ', '') }));
+
+        // Remove duplicatas mantendo a ordem
+        const vistas = new Set();
+        const optionsHtml = frotas
+          .filter(({ frota }) => { if (vistas.has(frota)) return false; vistas.add(frota); return true; })
+          .map(({ frota, cat }) => `<option value="${frota}">${frota} (${cat})</option>`)
+          .join('');
+
         if (selOs) selOs.innerHTML = optionsHtml;
-        if (selXlsm) selXlsm.innerHTML = optionsHtml;
       }
 
       function renderizarTudo() {
@@ -1935,10 +1580,8 @@
           if (!estado.usuarioAtual) return;
           estado.segundosRestantesVarredura -= 1;
           if (estado.segundosRestantesVarredura <= 0) {
-            estado.segundosRestantesVarredura = INTERVALO_VARREDURA_S;
-            sincronizarComPlanilhaRealDrive(false).then((ok) => {
-              if (!ok) executarVarreduraPlanilha(false);
-            });
+            sincronizarComPlanilhaRealDrive(false);
+            executarVarreduraPlanilha(false);
           } else {
             atualizarDisplayTimer10m();
           }
@@ -2021,4 +1664,285 @@
         });
 
         document.getElementById('btn-foto-simulada')?.addEventListener('click', () => {
-   
+          const frota = document.getElementById('os-frota').value;
+          const tipo = document.getElementById('os-tipo').value;
+          const desc = document.getElementById('os-descricao').value.trim() || 'INSPEÇÃO TÉCNICA EM CAMPO';
+          estado.fotoAnexadaDataUrl = gerarSvgEvidencia(frota, tipo, desc);
+          document.getElementById('os-foto-preview-img').src = estado.fotoAnexadaDataUrl;
+          document.getElementById('os-foto-nome').textContent = `evidencia_${frota}.svg`;
+          document.getElementById('os-foto-preview-wrap').classList.remove('hidden');
+        });
+
+        document.getElementById('os-foto-input')?.addEventListener('change', async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          estado.fotoAnexadaDataUrl = await lerArquivoBase64(file);
+          document.getElementById('os-foto-preview-img').src = estado.fotoAnexadaDataUrl;
+          document.getElementById('os-foto-nome').textContent = file.name;
+          document.getElementById('os-foto-preview-wrap').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-remover-foto')?.addEventListener('click', () => {
+          estado.fotoAnexadaDataUrl = null;
+          document.getElementById('os-foto-input').value = '';
+          document.getElementById('os-foto-preview-wrap').classList.add('hidden');
+        });
+
+        // EMITIR NOVA OS -> GRAVA LOG DE ENTRADA + FOTO NO GOOGLE DRIVE
+        document.getElementById('form-nova-os')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const btn = document.getElementById('btn-submit-nova-os');
+          btn.disabled = true;
+          btn.textContent = 'Gravando no Google Drive...';
+
+          const frota = document.getElementById('os-frota').value;
+          const tipo = document.getElementById('os-tipo').value;
+          const especialidade = document.getElementById('os-especialidade').value;
+          const mecanico = document.getElementById('os-mecanico').value;
+          const descricao = document.getElementById('os-descricao').value.trim().toUpperCase();
+          const novaOsId = `OS-${Math.floor(1044 + Math.random() * 8900)}`;
+          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === frota);
+
+          ordensServico.unshift({
+            id: novaOsId,
+            frota,
+            tipo,
+            especialidade,
+            descricao,
+            mecanico,
+            status: 'DESTINADA',
+            abertura: agoraFormatado(),
+            foto: estado.fotoAnexadaDataUrl
+          });
+
+          filaPendencias.unshift({
+            id: `PEND-${Math.floor(100 + Math.random() * 899)}`,
+            osId: novaOsId,
+            frota,
+            tipoPendencia: 'ENTRADA',
+            motivo: 'OS aberta pelo Encarregado • Aguardando lançamento de "Início" em manuntecao.xlsm',
+            solicitante: estado.usuarioAtual ? estado.usuarioAtual.nome : 'Encarregado',
+            criadoEm: agoraFormatado(),
+            criadoEmTs: Date.now()
+          });
+
+          await gravarLogNoGoogleDrive('entrada', {
+            id_os: novaOsId,
+            equipamento: frota,
+            frota: catInfo ? catInfo.categoria : 'EQUIPAMENTO MINA',
+            motivo: `${tipo} - ${descricao}`,
+            prioridade: tipo === 'Corretiva' ? 'Alta' : 'Média',
+            usuario: estado.usuarioAtual ? estado.usuarioAtual.nome : 'Encarregado',
+            imagem_base64: estado.fotoAnexadaDataUrl || ''
+          });
+
+          document.getElementById('os-descricao').value = '';
+          estado.fotoAnexadaDataUrl = null;
+          document.getElementById('os-foto-preview-wrap').classList.add('hidden');
+          btn.disabled = false;
+          btn.textContent = 'Emitir OS & Gravar Log de Entrada no Drive';
+
+          acionarSireneIndustrial(false);
+          renderizarTudo();
+          mostrarToast('OS Emitida & Direcionada', `${novaOsId} (${frota}) enviada para ${mecanico} e adicionada à Fila CCO.`, 'success');
+        });
+
+        document.body.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-acao]');
+          if (!btn) return;
+          const acao = btn.getAttribute('data-acao');
+
+          if (acao === 'abrir-historico') {
+            abrirModalHistorico(btn.getAttribute('data-frota'));
+          }
+
+          if (acao === 'ver-foto') {
+            const osId = btn.getAttribute('data-os-id');
+            const os = ordensServico.find((o) => o.id === osId);
+            if (os && os.foto) {
+              document.getElementById('modal-foto-titulo').textContent = `Evidência Fotográfica • ${os.id} (${os.frota})`;
+              document.getElementById('modal-foto-img').src = os.foto;
+              const m = document.getElementById('modal-foto');
+              m.classList.remove('hidden');
+              m.classList.add('flex');
+            }
+          }
+
+          if (acao === 'iniciar-os') {
+            const osId = btn.getAttribute('data-os-id');
+            const os = ordensServico.find((o) => o.id === osId);
+            if (os) {
+              os.status = 'EM_EXECUCAO';
+              renderizarTudo();
+              mostrarToast('Atendimento Iniciado', `${os.id} (${os.frota}) marcada como Em Execução.`, 'info');
+            }
+          }
+
+          if (acao === 'abrir-finalizar') {
+            const osId = btn.getAttribute('data-os-id');
+            const os = ordensServico.find((o) => o.id === osId);
+            const cat = CATALOGO_FROTAS.find((f) => f.frota === os?.frota);
+            if (os) {
+              document.getElementById('fin-os-id').value = os.id;
+              document.getElementById('fin-os-titulo').textContent = `${os.id} • ${os.frota}`;
+              document.getElementById('fin-os-servico').value = '';
+              document.getElementById('fin-os-pecas').value = '';
+              document.getElementById('fin-os-horimetro').value = cat ? cat.horimetro : 12000;
+              document.getElementById('fin-os-foto').value = '';
+              const m = document.getElementById('modal-finalizar-os');
+              m.classList.remove('hidden');
+              m.classList.add('flex');
+            }
+          }
+
+          if (acao === 'preencher-fim-xlsm') {
+            const rowId = btn.getAttribute('data-row-id');
+            const row = planilhaXlsmRows.find((r) => r.rowId === rowId);
+            if (row) {
+              row.fim = agoraFormatado();
+              renderizarFilaPendenciasESimulador();
+              mostrarToast(
+                'Horário "Fim" Preenchido na Planilha',
+                `Linha de ${row.frota} encerrada em manuntecao.xlsm. Clique em "Executar Varredura 10 min Agora" ou aguarde o ciclo para dar baixa automática.`,
+                'warning'
+              );
+            }
+          }
+        });
+
+        // FINALIZAR OS PELO MECÂNICO -> GRAVA LOG DE RETIRADA + FOTO NO GOOGLE DRIVE
+        document.getElementById('form-finalizar-os')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const btn = document.getElementById('btn-submit-fin-os');
+          btn.disabled = true;
+          btn.textContent = 'Gravando no Google Drive...';
+
+          const osId = document.getElementById('fin-os-id').value;
+          const servico = document.getElementById('fin-os-servico').value.trim();
+          const pecas = document.getElementById('fin-os-pecas').value.trim();
+          const horimetro = Number(document.getElementById('fin-os-horimetro').value);
+          const fotoFile = document.getElementById('fin-os-foto').files?.[0];
+          const fotoBase64 = await lerArquivoBase64(fotoFile);
+
+          const os = ordensServico.find((o) => o.id === osId);
+          if (!os) return;
+          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === os.frota);
+
+          os.status = 'CONCLUIDA';
+
+          if (!historicoTecnicoDB[os.frota]) {
+            historicoTecnicoDB[os.frota] = [];
+          }
+          historicoTecnicoDB[os.frota].unshift({
+            osCode: os.id,
+            data: agoraFormatado(),
+            horimetro,
+            tipo: os.tipo,
+            especialidade: os.especialidade,
+            falha: os.descricao,
+            servico,
+            pecas,
+            executante: os.mecanico
+          });
+
+          filaPendencias.unshift({
+            id: `PEND-${Math.floor(100 + Math.random() * 899)}`,
+            osId: os.id,
+            frota: os.frota,
+            tipoPendencia: 'BAIXA',
+            motivo: 'OS finalizada pelo mecânico • Permanece no QHA até preenchimento da coluna "Fim" em manuntecao.xlsm',
+            solicitante: os.mecanico,
+            criadoEm: agoraFormatado(),
+            criadoEmTs: Date.now()
+          });
+
+          await gravarLogNoGoogleDrive('retirada', {
+            id_os: os.id,
+            equipamento: os.frota,
+            frota: catInfo ? catInfo.categoria : 'EQUIPAMENTO MINA',
+            servico: `${servico} (Peças: ${pecas} | Horímetro: ${horimetro}h)`,
+            mecanico: os.mecanico,
+            usuario: estado.usuarioAtual ? estado.usuarioAtual.nome : os.mecanico,
+            imagem_base64: fotoBase64
+          });
+
+          btn.disabled = false;
+          btn.textContent = '✓ Finalizar & Salvar no Drive';
+
+          const m = document.getElementById('modal-finalizar-os');
+          m.classList.add('hidden');
+          m.classList.remove('flex');
+
+          renderizarTudo();
+          mostrarToast(
+            'OS Finalizada & Histórico Gravado',
+            `Frota ${os.frota} permanece no QHA até que o CCO preencha o horário "Fim" em manuntecao.xlsm.`,
+            'success'
+          );
+        });
+
+        document.getElementById('form-simulador-xlsm-entrada')?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const frota = document.getElementById('xlsm-nova-frota').value;
+          const comentario = document.getElementById('xlsm-novo-comentario').value.trim().toUpperCase();
+          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === frota) || {
+            categoria: 'EQUIPAMENTO MINA',
+            local: 'OFICINA FAGUNDES',
+            horimetro: 15000
+          };
+
+          planilhaXlsmRows.unshift({
+            rowId: `ROW-${Math.floor(10 + Math.random() * 89)}`,
+            frota,
+            categoria: catInfo.categoria,
+            inicio: agoraFormatado(),
+            fim: '',
+            duracaoMin: 15.0,
+            especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
+            matricula: '1328',
+            executante: 'Clecio Ribeiro dos Santos',
+            horimetro: catInfo.horimetro,
+            tipo: 'Corretiva',
+            local: catInfo.local,
+            comentario
+          });
+
+          document.getElementById('xlsm-novo-comentario').value = '';
+          renderizarTudo();
+          mostrarToast('Linha Gravada na Planilha', `${frota} inserida com "Início" preenchido e "Fim" vazio (ativa no QHA).`, 'info');
+        });
+
+        document.getElementById('btn-varredura-agora')?.addEventListener('click', () => {
+          executarVarreduraPlanilha(true);
+        });
+
+        document.getElementById('btn-fechar-modal-hist')?.addEventListener('click', fecharModalHistorico);
+        document.getElementById('btn-rodape-fechar-hist')?.addEventListener('click', fecharModalHistorico);
+        document.getElementById('modal-historico')?.addEventListener('click', (e) => {
+          if (e.target.id === 'modal-historico') fecharModalHistorico();
+        });
+
+        const fecharFin = () => {
+          const m = document.getElementById('modal-finalizar-os');
+          m.classList.add('hidden');
+          m.classList.remove('flex');
+        };
+        document.getElementById('btn-fechar-modal-fin')?.addEventListener('click', fecharFin);
+        document.getElementById('btn-cancelar-modal-fin')?.addEventListener('click', fecharFin);
+
+        document.getElementById('btn-fechar-modal-foto')?.addEventListener('click', () => {
+          const m = document.getElementById('modal-foto');
+          m.classList.add('hidden');
+          m.classList.remove('flex');
+        });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', inicializar);
+      } else {
+        inicializar();
+      }
+    })();
+  </script>
+</body>
+</html>

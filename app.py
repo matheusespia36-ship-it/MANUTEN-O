@@ -2,17 +2,15 @@ import io
 import os
 import re
 import time
-import html
 from datetime import datetime, timedelta, timezone
 import requests
 import openpyxl
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_from_directory
 
-# static_folder=None impede exposição de app.py, .env ou outros arquivos da raiz
-app = Flask(__name__, static_folder=None)
+app = Flask(__name__, static_folder=".")
+
 
 def _limpar_id(valor):
-    """Aceita o ID puro ou o link inteiro do Drive e devolve só o ID."""
     valor = (valor or "").strip().strip('"').strip("'")
     m = re.search(r"/d/([A-Za-z0-9_-]{10,})", valor) or re.search(r"[?&]id=([A-Za-z0-9_-]{10,})", valor)
     return m.group(1) if m else valor
@@ -20,12 +18,12 @@ def _limpar_id(valor):
 
 PUBLIC_FILE_ID = _limpar_id(os.environ.get("PUBLIC_FILE_ID", ""))
 APPS_SCRIPT_URL = os.environ.get("APPS_SCRIPT_URL", "").strip()
-URL_DOWNLOAD_PUBLICO = f"https://drive.google.com/uc?export=download&confirm=t&id={PUBLIC_FILE_ID}"
+LOCAL_XLSM_PATH = os.environ.get("LOCAL_XLSM_PATH", "/sdcard/Download/manuntecao.xlsm").strip()
 
-# Cache de 30 segundos em memória para evitar downloads repetidos do Drive
 _CACHE_PLANILHA = {
     "timestamp": 0.0,
-    "dados": None
+    "dados": None,
+    "historico_por_frota": {}
 }
 CACHE_TTL_SEGUNDOS = 30
 
@@ -50,7 +48,6 @@ def _formatar_data(valor):
 
 
 def _agora_local():
-    # Planilha em horário de Belém (UTC-3); o servidor (ex.: Render) roda em UTC
     return datetime.now(timezone(timedelta(hours=-3))).replace(tzinfo=None)
 
 
@@ -78,32 +75,37 @@ def _inferir_categoria(frota, cat_planilha=""):
     return "EQUIPAMENTO MINA"
 
 
-def _ler_planilha_drive(forcar=False):
-    agora = time.time()
-    if not forcar and _CACHE_PLANILHA["dados"] is not None and (agora - _CACHE_PLANILHA["timestamp"] < CACHE_TTL_SEGUNDOS):
-        return _CACHE_PLANILHA["dados"]
-
-    resposta = requests.get(URL_DOWNLOAD_PUBLICO, timeout=25)
+def _baixar_conteudo_drive(file_id):
+    url = f"https://drive.google.com/uc?export=download&confirm=t&id={file_id}"
+    session = requests.Session()
+    resposta = session.get(url, timeout=30)
     if resposta.status_code in (403, 404):
-        raise RuntimeError(
-            f"O Drive respondeu HTTP {resposta.status_code}. Confira se o ID do arquivo está certo "
-            "e se o compartilhamento é 'Qualquer pessoa com o link'."
-        )
+        raise RuntimeError(f"O Drive respondeu HTTP {resposta.status_code}. Confira o compartilhamento.")
     resposta.raise_for_status()
+
+    for k, v in resposta.cookies.items():
+        if k.startswith("download_warning"):
+            resposta = session.get(url, params={"confirm": v}, timeout=30)
+            resposta.raise_for_status()
+            break
+
+    if not resposta.content.startswith(b"PK"):
+        if b"confirm=" in resposta.content:
+            m = re.search(r'confirm=([A-Za-z0-9_-]+)', resposta.text)
+            if m:
+                resposta = session.get(url, params={"confirm": m.group(1)}, timeout=30)
+                resposta.raise_for_status()
+
     if not resposta.content.startswith(b"PK"):
         trecho = re.sub(r"\s+", " ", resposta.text[:150]) if resposta.content else "(vazio)"
-        raise RuntimeError(
-            "O Drive não devolveu uma planilha .xlsx/.xlsm (veio uma página). "
-            "Se o arquivo for uma Planilha Google, exporte como .xlsx e use o ID do .xlsx. "
-            f"Trecho recebido: {trecho}"
-        )
-    try:
-        wb = openpyxl.load_workbook(io.BytesIO(resposta.content), data_only=True, read_only=True)
-    except Exception as e:
-        raise RuntimeError(f"Arquivo baixado, mas não foi possível abrir como planilha: {e}")
+        raise RuntimeError(f"O Drive não devolveu uma planilha (veio página de aviso). Trecho: {trecho}")
 
+    return resposta.content
+
+
+def _processar_workbook(wb):
     em_manutencao = []
-    encerrados_recentes = []
+    historico_por_frota = {}
     abas_lidas = 0
 
     for nome_aba in wb.sheetnames:
@@ -125,10 +127,9 @@ def _ler_planilha_drive(forcar=False):
             continue
         abas_lidas += 1
 
-        idx_equip = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("FROTA", "EQUIP", "TAG", "NOME"))), 0)
+        idx_equip = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("FROTA", "EQUIP", "TAG"))), 0)
         idx_inicio = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("INICIO", "INÍCIO"))), None)
         idx_fim = next((i for i, h in enumerate(cabecalhos) if "FIM" in h), None)
-        # Prioriza COMENTÁRIO sobre DESCRIÇÃO para trazer o defeito real
         idx_comentario = next((i for i, h in enumerate(cabecalhos) if "COMENT" in h), None)
         if idx_comentario is None:
             idx_comentario = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("FALHA", "MOTIVO", "DESCR"))), None)
@@ -178,108 +179,139 @@ def _ler_planilha_drive(forcar=False):
                 "categoria": _inferir_categoria(equip_str, cat_val),
                 "inicio": inicio_str,
                 "fim": fim_str if fim_str not in ("None", "nan", "-") else "",
-                "duracao_min": duracao_min,
+                "duracaoMin": duracao_min,
                 "especialidade": str(esp_val).strip() if esp_val not in (None, "") else "MANUTENÇÃO",
                 "mecanico": str(mec_val).strip() if mec_val not in (None, "") else "-",
                 "matricula": str(mat_val).strip() if mat_val not in (None, "") else "-",
                 "horimetro": str(hor_val).strip() if hor_val not in (None, "") else "-",
                 "tipo": str(tipo_val).strip().capitalize() if tipo_val not in (None, "") else "Corretiva",
-                "local": str(local_val).strip() if local_val not in (None, "") else "",
+                "local": str(local_val).strip() if local_val not in (None, "") else "OFICINA FAGUNDES",
                 "motivo": str(comentario_val).strip() if comentario_val not in (None, "") else "SEM COMENTÁRIO"
             }
 
             if item["fim"] == "":
                 em_manutencao.append(item)
             else:
-                encerrados_recentes.append(item)
+                # Agrupa no histórico por equipamento
+                if equip_str not in historico_por_frota:
+                    historico_por_frota[equip_str] = []
+                historico_por_frota[equip_str].append({
+                    "data": item["fim"],
+                    "inicio": item["inicio"],
+                    "fim": item["fim"],
+                    "duracaoMin": item["duracaoMin"],
+                    "tipo": item["tipo"],
+                    "especialidade": item["especialidade"],
+                    "falha": item["motivo"],
+                    "servico": item["especialidade"],
+                    "pecas": "-",
+                    "horimetro": item["horimetro"],
+                    "executante": f"{item['mecanico']} ({item['matricula']})" if item['matricula'] != '-' else item['mecanico']
+                })
 
     wb.close()
+    return em_manutencao, historico_por_frota, abas_lidas
 
+
+def _obter_dados_planilha(forcar=False):
+    agora = time.time()
+    if not forcar and _CACHE_PLANILHA["dados"] is not None and (agora - _CACHE_PLANILHA["timestamp"] < CACHE_TTL_SEGUNDOS):
+        return _CACHE_PLANILHA["dados"], _CACHE_PLANILHA["historico_por_frota"]
+
+    wb = None
+    fonte = "nenhuma"
+
+    if PUBLIC_FILE_ID:
+        try:
+            conteudo = _baixar_conteudo_drive(PUBLIC_FILE_ID)
+            wb = openpyxl.load_workbook(io.BytesIO(conteudo), data_only=True, read_only=True)
+            fonte = "google_drive"
+        except Exception as e:
+            if not os.path.exists(LOCAL_XLSM_PATH):
+                raise RuntimeError(f"Falha ao ler planilha do Google Drive: {str(e)}")
+            print(f"Aviso Google Drive: {e}. Usando fallback local.")
+
+    if wb is None and os.path.exists(LOCAL_XLSM_PATH):
+        try:
+            wb = openpyxl.load_workbook(LOCAL_XLSM_PATH, data_only=True, read_only=True)
+            fonte = f"local ({LOCAL_XLSM_PATH})"
+        except Exception as e:
+            raise RuntimeError(f"Erro ao ler arquivo local: {str(e)}")
+
+    if wb is None:
+        raise RuntimeError("Nenhuma planilha encontrada. Configure PUBLIC_FILE_ID ou verifique o arquivo local.")
+
+    em_manutencao, historico_por_frota, abas_lidas = _processar_workbook(wb)
     if abas_lidas == 0:
-        raise RuntimeError(
-            "Nenhuma aba tem as colunas esperadas (equipamento/frota, hora_inicio e hora_fim) nas primeiras 12 linhas."
-        )
+        raise RuntimeError("Nenhuma aba tem as colunas esperadas (equipamento, inicio e fim).")
+
     resultado = {
         "total": len(em_manutencao),
         "equipamentos": em_manutencao,
-        "encerrados_recentes": sorted(
-            encerrados_recentes,
-            key=lambda i: _parse_data_excel(i["fim"]) or datetime.min,
-            reverse=True
-        )[:50]
+        "fonte": fonte
     }
+
     _CACHE_PLANILHA["timestamp"] = agora
     _CACHE_PLANILHA["dados"] = resultado
-    return resultado
+    _CACHE_PLANILHA["historico_por_frota"] = historico_por_frota
+
+    return resultado, historico_por_frota
 
 
 @app.route("/")
 def index():
-    return send_file("index.html")
+    return send_from_directory(".", "index.html")
 
 
 @app.route("/api/em-manutencao", methods=["GET"])
 def listar_em_manutencao():
-    if not PUBLIC_FILE_ID:
-        return jsonify({
-            "erro": "Variável PUBLIC_FILE_ID não configurada no servidor.",
-            "total": 0,
-            "equipamentos": [],
-            "encerrados_recentes": []
-        }), 500
-
     forcar = request.args.get("refresh") == "1"
     try:
-        dados = _ler_planilha_drive(forcar=forcar)
+        dados, _ = _obter_dados_planilha(forcar=forcar)
         return jsonify(dados)
     except Exception as e:
-        return jsonify({
-            "erro": f"Falha ao ler planilha do Drive: {str(e)}",
-            "total": 0,
-            "equipamentos": [],
-            "encerrados_recentes": []
-        }), 500
+        return jsonify({"erro": str(e), "total": 0, "equipamentos": []}), 500
 
 
-def _enviar_para_apps_script(tipo, payload):
-    if not APPS_SCRIPT_URL:
-        return jsonify({
-            "ok": False,
-            "erro": "APPS_SCRIPT_URL não configurada no Render. Log não gravado no Drive."
-        }), 503
-
-    dados = dict(payload or {})
-    dados["tipo"] = tipo
+@app.route("/api/historico/<frota>", methods=["GET"])
+def obter_historico(frota):
+    frota_limpa = frota.strip().upper()
     try:
-        res = requests.post(APPS_SCRIPT_URL, json=dados, timeout=20)
-        res.raise_for_status()
-        try:
-            return jsonify({"ok": True, **res.json()})
-        except ValueError:
-            return jsonify({"ok": True, "resposta": res.text})
-    except Exception as e:
+        _, historico = _obter_dados_planilha(forcar=False)
+        registros = historico.get(frota_limpa, [])
         return jsonify({
-            "ok": False,
-            "erro": f"Falha na comunicação com Google Apps Script: {str(e)}"
-        }), 502
+            "frota": frota_limpa,
+            "total": len(registros),
+            "registros": registros[:50]  # Retorna as últimas 50 manutenções reais dessa máquina
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e), "frota": frota_limpa, "registros": []}), 500
 
 
 @app.route("/api/log/entrada", methods=["POST"])
 def log_entrada():
-    return _enviar_para_apps_script("entrada", request.json)
+    dados = dict(request.json or {})
+    dados["tipo"] = "entrada"
+    if not APPS_SCRIPT_URL:
+        return jsonify({"ok": True, "status": "simulado", "mensagem": "Log aceito localmente."}), 200
+    try:
+        res = requests.post(APPS_SCRIPT_URL, json=dados, timeout=25)
+        return jsonify({"ok": True, **res.json()})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 502
 
 
 @app.route("/api/log/retirada", methods=["POST"])
 def log_retirada():
-    return _enviar_para_apps_script("retirada", request.json)
-
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-ods=["POST"])
-def log_retirada():
-    return _enviar_para_apps_script("retirada", request.json)
+    dados = dict(request.json or {})
+    dados["tipo"] = "retirada"
+    if not APPS_SCRIPT_URL:
+        return jsonify({"ok": True, "status": "simulado", "mensagem": "Log aceito localmente."}), 200
+    try:
+        res = requests.post(APPS_SCRIPT_URL, json=dados, timeout=25)
+        return jsonify({"ok": True, **res.json()})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 502
 
 
 if __name__ == "__main__":
