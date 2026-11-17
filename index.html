@@ -153,6 +153,43 @@
       animation: pulso-corporativo 2s infinite ease-in-out;
     }
 
+    /* MODO TV EM TELA CHEIA (APÓS LOGIN) */
+    body.modo-tv-ativo {
+      overflow: hidden;
+    }
+    body.modo-tv-ativo #barra-abas,
+    body.modo-tv-ativo #btn-testar-sirene,
+    body.modo-tv-ativo #btn-minha-senha,
+    body.modo-tv-ativo #btn-sair-login,
+    body.modo-tv-ativo #btn-modo-tv,
+    body.modo-tv-ativo #qha-busca-texto,
+    body.modo-tv-ativo #btn-sincronizar-planilha-real {
+      display: none !important;
+    }
+    body.modo-tv-ativo #btn-sair-modo-tv {
+      display: inline-flex !important;
+    }
+    body.modo-tv-ativo #aba-quadro > div:nth-child(2) {
+      display: none !important;
+    }
+    body.modo-tv-ativo main {
+      max-width: 100% !important;
+      padding: 12px 20px !important;
+    }
+    body.modo-tv-ativo .tabela-qha-industrial {
+      font-size: 16.5px !important;
+    }
+    body.modo-tv-ativo .tabela-qha-industrial thead th {
+      font-size: 14px !important;
+      padding: 12px 14px !important;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    body.modo-tv-ativo .tabela-qha-industrial tbody td {
+      padding: 11px 14px !important;
+    }
+
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -283,6 +320,25 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            id="btn-modo-tv"
+            class="flex items-center gap-1.5 bg-[#00379e] hover:bg-[#0047cc] text-white font-bold text-xs px-3 py-2 rounded-lg transition cursor-pointer shadow"
+            title="Expandir Quadro QHA para exibição em Televisão"
+          >
+            <span>📺</span>
+            <span>Modo TV</span>
+          </button>
+
+          <button
+            type="button"
+            id="btn-sair-modo-tv"
+            class="hidden items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition cursor-pointer shadow"
+          >
+            <span>✕</span>
+            <span>Sair do Modo TV</span>
+          </button>
+
           <button
             type="button"
             id="btn-testar-sirene"
@@ -1104,7 +1160,6 @@
       // Converte "DD/MM/YYYY HH:MM" → timestamp numérico (0 se inválido)
       function parsePtBrDataTs(str) {
         if (!str) return 0;
-        // "DD/MM/YYYY HH:MM"
         const m = str.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
         if (!m) return 0;
         return new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5]).getTime();
@@ -1118,9 +1173,6 @@
           const linhasFrota = planilhaXlsmRows.filter((r) => r.frota === pend.frota);
 
           if (pend.tipoPendencia === 'ENTRADA') {
-            // Só remove se aparecer um "início" na planilha que seja POSTERIOR
-            // ao momento em que a OS foi emitida (evita remover pendência logo
-            // porque a frota já estava no QHA antes da OS ser criada)
             const tsOs = pend.criadoEmTs || 0;
             const novaEntrada = linhasFrota.some((r) => {
               if (r.inicio.trim() === '' || r.fim.trim() !== '') return false;
@@ -1135,8 +1187,6 @@
           }
 
           if (pend.tipoPendencia === 'BAIXA') {
-            // Remove quando a frota já não tiver mais linha sem "fim"
-            // E houver ao menos uma linha com "fim" posterior à criação da pendência
             const tsOs = pend.criadoEmTs || 0;
             const aindaTemLinhaSemFim = linhasFrota.some((r) => r.inicio.trim() !== '' && r.fim.trim() === '');
             const temFimNovo = linhasFrota.some((r) => {
@@ -1881,13 +1931,11 @@
       }
 
       function popularSelectsFrota() {
-        // Usa equipamentos reais da planilha se já carregados; senão usa catálogo fixo
         const selOs = document.getElementById('os-frota');
         const frotas = planilhaXlsmRows.length > 0
           ? planilhaXlsmRows.map((r) => ({ frota: r.frota, cat: r.categoria.replace('EQUIPAMENTO ', '') }))
           : CATALOGO_FROTAS.map((f) => ({ frota: f.frota, cat: f.categoria.replace('EQUIPAMENTO ', '') }));
 
-        // Remove duplicatas mantendo a ordem
         const vistas = new Set();
         const optionsHtml = frotas
           .filter(({ frota }) => { if (vistas.has(frota)) return false; vistas.add(frota); return true; })
@@ -1938,6 +1986,7 @@
       function sairDoSistema() {
         estado.usuarioAtual = null;
         listaUsuarios = [];
+        document.body.classList.remove('modo-tv-ativo');
         document.getElementById('tela-sistema').classList.add('hidden');
         document.getElementById('tela-login').classList.remove('hidden');
         document.getElementById('input-senha').value = '';
@@ -1958,6 +2007,71 @@
         }, 1000);
 
         ligarGestaoAcessos();
+
+        // ===================================================================
+        // CONTROLE DO MODO TV (TELA CHEIA APÓS LOGIN)
+        // ===================================================================
+        let intervaloTvSync = null;
+        let intervaloTvScroll = null;
+        let direcaoScrollTv = 1;
+
+        function ativarModoTv() {
+          estado.abaAtiva = 'quadro';
+          renderizarTudo();
+          document.body.classList.add('modo-tv-ativo');
+
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
+
+          clearInterval(intervaloTvSync);
+          intervaloTvSync = setInterval(() => {
+            sincronizarComPlanilhaRealDrive(false);
+          }, 60000);
+
+          const containerTabela = document.querySelector('#aba-quadro .overflow-x-auto');
+          if (containerTabela) {
+            containerTabela.style.maxHeight = 'calc(100vh - 210px)';
+            containerTabela.style.overflowY = 'auto';
+            clearInterval(intervaloTvScroll);
+            intervaloTvScroll = setInterval(() => {
+              if (containerTabela.scrollHeight <= containerTabela.clientHeight) return;
+              containerTabela.scrollTop += direcaoScrollTv;
+              if (containerTabela.scrollTop + containerTabela.clientHeight >= containerTabela.scrollHeight - 2) {
+                direcaoScrollTv = -1;
+              } else if (containerTabela.scrollTop <= 0) {
+                direcaoScrollTv = 1;
+              }
+            }, 50);
+          }
+
+          mostrarToast('Modo TV Ativado', 'Quadro QHA em tela cheia com atualização automática a cada 1 min.', 'success');
+        }
+
+        function desativarModoTv() {
+          document.body.classList.remove('modo-tv-ativo');
+          clearInterval(intervaloTvSync);
+          clearInterval(intervaloTvScroll);
+
+          const containerTabela = document.querySelector('#aba-quadro .overflow-x-auto');
+          if (containerTabela) {
+            containerTabela.style.maxHeight = '';
+            containerTabela.style.overflowY = '';
+          }
+
+          if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+        }
+
+        document.getElementById('btn-modo-tv')?.addEventListener('click', ativarModoTv);
+        document.getElementById('btn-sair-modo-tv')?.addEventListener('click', desativarModoTv);
+
+        document.addEventListener('fullscreenchange', () => {
+          if (!document.fullscreenElement && document.body.classList.contains('modo-tv-ativo')) {
+            desativarModoTv();
+          }
+        });
 
         const formLogin = document.getElementById('form-login');
         if (formLogin) {
@@ -1988,6 +2102,7 @@
           .catch(() => {});
 
         document.getElementById('btn-sair-login')?.addEventListener('click', async () => {
+          desativarModoTv();
           try { await api('/api/logout', { method: 'POST' }); } catch (_) { /* segue para a tela de login */ }
           sairDoSistema();
         });
