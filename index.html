@@ -153,9 +153,9 @@
       animation: pulso-corporativo 2s infinite ease-in-out;
     }
 
-    /* MODO TV PURO (APENAS A TABELA NA TELA INTEIRA) */
+    /* MODO TV FIXO (TODOS OS EQUIPAMENTOS NA TELA SEM ROLAGEM) */
     body.modo-tv-ativo {
-      overflow: hidden;
+      overflow: hidden !important;
       background: #ffffff;
     }
     body.modo-tv-ativo header,
@@ -169,6 +169,7 @@
       max-width: 100% !important;
       padding: 0 !important;
       margin: 0 !important;
+      height: 100vh !important;
     }
     body.modo-tv-ativo #aba-quadro,
     body.modo-tv-ativo #aba-quadro > div:nth-child(3) {
@@ -176,31 +177,44 @@
       border-radius: 0 !important;
       margin: 0 !important;
       box-shadow: none !important;
-    }
-    body.modo-tv-ativo #aba-quadro .overflow-x-auto {
-      max-height: 100vh !important;
       height: 100vh !important;
     }
+    body.modo-tv-ativo #aba-quadro .overflow-x-auto {
+      height: 100vh !important;
+      max-height: 100vh !important;
+      overflow: hidden !important;
+    }
     body.modo-tv-ativo .tabela-qha-industrial {
-      font-size: 18px !important;
+      height: 100vh !important;
+      width: 100% !important;
+      table-layout: fixed;
     }
     body.modo-tv-ativo .tabela-qha-industrial thead th {
-      font-size: 15px !important;
-      padding: 14px 16px !important;
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      padding: 6px 10px !important;
+      font-size: 13px !important;
+      line-height: 1.1 !important;
     }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(1) { width: 8%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(2) { width: 12%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(3) { width: 27%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(4) { width: 11%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(5) { width: 10%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(6) { width: 32%; }
+
     body.modo-tv-ativo .tabela-qha-industrial tbody td {
-      padding: 12px 16px !important;
+      padding: 0 10px !important;
+      line-height: 1.05 !important;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     body.modo-tv-ativo #btn-sair-modo-tv {
       display: inline-flex !important;
       position: fixed;
-      bottom: 12px;
-      right: 12px;
+      bottom: 8px;
+      right: 8px;
       z-index: 9999;
-      opacity: 0.25;
+      opacity: 0.2;
       transition: opacity 0.2s ease;
     }
     body.modo-tv-ativo #btn-sair-modo-tv:hover {
@@ -940,7 +954,6 @@
     (function () {
       'use strict';
 
-      // Usuários e senhas ficam no servidor (senha criptografada). Aqui só existe o rótulo das abas.
       const ABAS_ROTULO = {
         quadro: 'Quadro de Manutenções (QHA)',
         os: 'Ordens de Serviço (OS)',
@@ -972,7 +985,6 @@
         return /^mat/i.test(t) ? t : `Mat. ${t}`;
       }
 
-      // Converte o usuário vindo da API no formato usado pela interface
       function montarUsuarioUI(u) {
         return {
           ...u,
@@ -990,7 +1002,7 @@
           body: opts.body ? JSON.stringify(opts.body) : undefined
         });
         let data = {};
-        try { data = await res.json(); } catch (_) { /* resposta sem corpo */ }
+        try { data = await res.json(); } catch (_) {}
         if (res.status === 401 && estado.usuarioAtual) {
           sairDoSistema();
           mostrarToast('Sessão expirada', 'Entre novamente para continuar.', 'warning');
@@ -1019,11 +1031,8 @@
       ];
 
       let planilhaXlsmRows = [];
-
       let ordensServico = [];
-
       let filaPendencias = [];
-
       let historicoTecnicoDB = {};
 
       let estado = {
@@ -1033,6 +1042,28 @@
         fotoAnexadaDataUrl: null,
         segundosRestantesVarredura: 600
       };
+
+      // =====================================================================
+      // AJUSTE AUTOMÁTICO DA TABELA NO MODO TV FIXO (SEM ROLAGEM)
+      // =====================================================================
+      function ajustarEscalaTabelaTv() {
+        if (!document.body.classList.contains('modo-tv-ativo')) return;
+        const tabela = document.querySelector('#aba-quadro .tabela-qha-industrial');
+        const thead = tabela?.querySelector('thead');
+        const linhas = tabela?.querySelectorAll('tbody tr');
+        if (!tabela || !thead || !linhas || linhas.length === 0) return;
+
+        const alturaTela = window.innerHeight;
+        const alturaCabecalho = thead.offsetHeight || 32;
+        const alturaDisponivel = alturaTela - alturaCabecalho;
+        const alturaPorLinha = Math.floor(alturaDisponivel / linhas.length);
+        const fonteCalculada = Math.max(10, Math.min(20, Math.floor(alturaPorLinha * 0.62)));
+
+        linhas.forEach((tr) => {
+          tr.style.height = `${alturaPorLinha}px`;
+          tr.style.fontSize = `${fonteCalculada}px`;
+        });
+      }
 
       // =====================================================================
       // INTEGRAÇÃO COM BACKEND FLASK + GOOGLE DRIVE (manuntecao.xlsm & Logs)
@@ -1175,7 +1206,6 @@
         return new Date().toLocaleTimeString('pt-BR');
       }
 
-      // Converte "DD/MM/YYYY HH:MM" → timestamp numérico (0 se inválido)
       function parsePtBrDataTs(str) {
         if (!str) return 0;
         const m = str.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
@@ -1309,6 +1339,8 @@
             </tr>
           `;
         }).join('');
+
+        ajustarEscalaTabelaTv();
       }
 
       function renderizarListaMecanico() {
@@ -1696,11 +1728,9 @@
         if (!tbody) return;
         const eu = estado.usuarioAtual;
 
-        // Aviso de senha inicial
         const aviso = document.getElementById('aviso-senha-padrao');
         if (aviso) aviso.classList.toggle('hidden', !(eu && eu.trocarSenha));
 
-        // Resumo
         const resumo = document.getElementById('resumo-acessos');
         if (resumo) {
           const ativos = listaUsuarios.filter((u) => u.ativo).length;
@@ -2027,11 +2057,9 @@
         ligarGestaoAcessos();
 
         // ===================================================================
-        // CONTROLE DO MODO TV (TELA CHEIA APÓS LOGIN)
+        // CONTROLE DO MODO TV FIXO (CABE 100% NA TELA SEM ROLAGEM)
         // ===================================================================
         let intervaloTvSync = null;
-        let intervaloTvScroll = null;
-        let direcaoScrollTv = 1;
 
         function ativarModoTv() {
           estado.abaAtiva = 'quadro';
@@ -2042,52 +2070,39 @@
             document.documentElement.requestFullscreen().catch(() => {});
           }
 
+          setTimeout(ajustarEscalaTabelaTv, 50);
+
           clearInterval(intervaloTvSync);
           intervaloTvSync = setInterval(() => {
-            sincronizarComPlanilhaRealDrive(false);
+            sincronizarComPlanilhaRealDrive(false).then(ajustarEscalaTabelaTv);
           }, 60000);
 
-          const containerTabela = document.querySelector('#aba-quadro .overflow-x-auto');
-          if (containerTabela) {
-            containerTabela.style.maxHeight = '100vh';
-            containerTabela.style.overflowY = 'auto';
-            clearInterval(intervaloTvScroll);
-            intervaloTvScroll = setInterval(() => {
-              if (containerTabela.scrollHeight <= containerTabela.clientHeight) return;
-              containerTabela.scrollTop += direcaoScrollTv;
-              if (containerTabela.scrollTop + containerTabela.clientHeight >= containerTabela.scrollHeight - 2) {
-                direcaoScrollTv = -1;
-              } else if (containerTabela.scrollTop <= 0) {
-                direcaoScrollTv = 1;
-              }
-            }, 50);
-          }
-
-          mostrarToast('Modo TV Ativado', 'Quadro QHA em tela cheia com atualização automática a cada 1 min.', 'success');
+          mostrarToast('Modo TV Fixo Ativado', 'Todos os equipamentos ajustados na tela sem rolagem.', 'success');
         }
 
         function desativarModoTv() {
           document.body.classList.remove('modo-tv-ativo');
           clearInterval(intervaloTvSync);
-          clearInterval(intervaloTvScroll);
 
-          const containerTabela = document.querySelector('#aba-quadro .overflow-x-auto');
-          if (containerTabela) {
-            containerTabela.style.maxHeight = '';
-            containerTabela.style.overflowY = '';
-          }
+          document.querySelectorAll('#aba-quadro .tabela-qha-industrial tbody tr').forEach((tr) => {
+            tr.style.height = '';
+            tr.style.fontSize = '';
+          });
 
           if (document.fullscreenElement && document.exitFullscreen) {
             document.exitFullscreen().catch(() => {});
           }
         }
 
+        window.addEventListener('resize', ajustarEscalaTabelaTv);
         document.getElementById('btn-modo-tv')?.addEventListener('click', ativarModoTv);
         document.getElementById('btn-sair-modo-tv')?.addEventListener('click', desativarModoTv);
 
         document.addEventListener('fullscreenchange', () => {
           if (!document.fullscreenElement && document.body.classList.contains('modo-tv-ativo')) {
             desativarModoTv();
+          } else {
+            setTimeout(ajustarEscalaTabelaTv, 80);
           }
         });
 
@@ -2113,7 +2128,6 @@
           });
         }
 
-        // Mantém a sessão ao recarregar a página
         fetch('/api/me', { credentials: 'same-origin' })
           .then((r) => r.json())
           .then((d) => { if (d && d.usuario) entrarNoSistema(d.usuario, false); })
@@ -2121,7 +2135,7 @@
 
         document.getElementById('btn-sair-login')?.addEventListener('click', async () => {
           desativarModoTv();
-          try { await api('/api/logout', { method: 'POST' }); } catch (_) { /* segue para a tela de login */ }
+          try { await api('/api/logout', { method: 'POST' }); } catch (_) {}
           sairDoSistema();
         });
 
@@ -2193,7 +2207,6 @@
           document.getElementById('os-foto-preview-wrap').classList.add('hidden');
         });
 
-        // EMITIR NOVA OS -> GRAVA LOG DE ENTRADA + FOTO NO GOOGLE DRIVE
         document.getElementById('form-nova-os')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const btn = document.getElementById('btn-submit-nova-os');
@@ -2315,7 +2328,6 @@
           }
         });
 
-        // FINALIZAR OS PELO MECÂNICO -> GRAVA LOG DE RETIRADA + FOTO NO GOOGLE DRIVE
         document.getElementById('form-finalizar-os')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const btn = document.getElementById('btn-submit-fin-os');
