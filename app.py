@@ -1,734 +1,2465 @@
-import io
-import json
-import os
-import re
-import secrets
-import threading
-import time
-from functools import wraps
-from datetime import datetime, timedelta, timezone
-import requests
-import openpyxl
-from flask import Flask, request, jsonify, send_from_directory, session
-from werkzeug.security import generate_password_hash, check_password_hash
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel de Manutenção & OS (QHA) • Fagundes Construção e Mineração</title>
 
-app = Flask(__name__, static_folder=None)
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
+  <!-- Tone.js para Sirene Industrial LFO -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 
-def _limpar_id(valor):
-    valor = (valor or "").strip().strip('"').strip("'")
-    m = re.search(r"/d/([A-Za-z0-9_-]{10,})", valor) or re.search(r"[?&]id=([A-Za-z0-9_-]{10,})", valor)
-    return m.group(1) if m else valor
+  <!-- Fontes Oficiais: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
 
-
-PUBLIC_FILE_ID = _limpar_id(os.environ.get("PUBLIC_FILE_ID", ""))
-APPS_SCRIPT_URL = os.environ.get("APPS_SCRIPT_URL", "").strip()
-LOCAL_XLSM_PATH = os.environ.get("LOCAL_XLSM_PATH", "/sdcard/Download/manuntecao.xlsm").strip()
-
-USERS_FILE = os.environ.get("USERS_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "usuarios.json"))
-USERS_SYNC_TOKEN = os.environ.get("USERS_SYNC_TOKEN", "").strip()
-
-
-def _secret_key():
-    chave = os.environ.get("SECRET_KEY", "").strip()
-    if chave:
-        return chave
-    caminho = USERS_FILE + ".secret"
-    try:
-        with open(caminho, "r", encoding="utf-8") as f:
-            valor = f.read().strip()
-            if valor:
-                return valor
-    except OSError:
-        pass
-    valor = secrets.token_hex(32)
-    try:
-        with open(caminho, "w", encoding="utf-8") as f:
-            f.write(valor)
-    except OSError:
-        pass
-    return valor
-
-
-app.secret_key = _secret_key()
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=bool(os.environ.get("RENDER")),
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
-)
-
-_CACHE_PLANILHA = {
-    "timestamp": 0.0,
-    "dados": None,
-    "historico_por_frota": {}
-}
-CACHE_TTL_SEGUNDOS = 30
-
-
-def _parse_data_excel(valor):
-    if isinstance(valor, datetime):
-        return valor
-    texto = str(valor or "").strip()
-    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
-        try:
-            return datetime.strptime(texto, fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def _formatar_data(valor):
-    dt = _parse_data_excel(valor)
-    if dt:
-        return dt.strftime("%d/%m/%Y %H:%M")
-    return str(valor or "").strip()
-
-
-def _agora_local():
-    return datetime.now(timezone(timedelta(hours=-3))).replace(tzinfo=None)
-
-
-def _calcular_duracao_minutos(inicio_val):
-    dt_inicio = _parse_data_excel(inicio_val)
-    if not dt_inicio:
-        return 0.0
-    diff = (_agora_local() - dt_inicio).total_seconds() / 60.0
-    return round(max(diff, 0.0), 2)
-
-
-def _inferir_categoria(frota, cat_planilha=""):
-    cat_up = str(cat_planilha or "").strip().upper()
-    if cat_up:
-        return cat_up
-    cod = str(frota or "").strip().upper()
-    if cod.startswith("CR"):
-        return "EQUIPAMENTO INFRA"
-    if cod.startswith("EH0"):
-        return "EQUIPAMENTO AUXILIAR"
-    if cod.startswith(("C221", "EH720")):
-        return "EQUIPAMENTO DRYSTACK"
-    if cod.startswith("C23"):
-        return "EQUIPAMENTO ALIMENTACAO"
-    return "EQUIPAMENTO MINA"
-
-
-def _baixar_conteudo_drive(file_id):
-    url = f"https://drive.google.com/uc?export=download&confirm=t&id={file_id}"
-    req_session = requests.Session()
-    resposta = req_session.get(url, timeout=30)
-    if resposta.status_code in (403, 404):
-        raise RuntimeError(f"O Drive respondeu HTTP {resposta.status_code}. Confira o compartilhamento.")
-    resposta.raise_for_status()
-
-    for k, v in resposta.cookies.items():
-        if k.startswith("download_warning"):
-            resposta = req_session.get(url, params={"confirm": v}, timeout=30)
-            resposta.raise_for_status()
-            break
-
-    if not resposta.content.startswith(b"PK"):
-        if b"confirm=" in resposta.content:
-            m = re.search(r'confirm=([A-Za-z0-9_-]+)', resposta.text)
-            if m:
-                resposta = req_session.get(url, params={"confirm": m.group(1)}, timeout=30)
-                resposta.raise_for_status()
-
-    if not resposta.content.startswith(b"PK"):
-        trecho = re.sub(r"\s+", " ", resposta.text[:150]) if resposta.content else "(vazio)"
-        raise RuntimeError(f"O Drive não devolveu uma planilha (veio página de aviso). Trecho: {trecho}")
-
-    return resposta.content
-
-
-def _processar_workbook(wb):
-    em_manutencao = []
-    historico_por_frota = {}
-    abas_lidas = 0
-
-    for nome_aba in wb.sheetnames:
-        ws = wb[nome_aba]
-        linha_cabecalho = None
-        cabecalhos = []
-
-        for idx_linha, row in enumerate(ws.iter_rows(min_row=1, max_row=12, values_only=True), start=1):
-            valores = [str(c).strip().upper() if c is not None else "" for c in row]
-            tem_frota = any(k in v for v in valores for k in ("FROTA", "EQUIP", "TAG", "NOME"))
-            tem_inicio = any(k in v for v in valores for k in ("INICIO", "INÍCIO"))
-            tem_fim = any("FIM" in v for v in valores)
-            if tem_frota and tem_inicio and tem_fim:
-                linha_cabecalho = idx_linha
-                cabecalhos = valores
-                break
-
-        if not linha_cabecalho:
-            continue
-        abas_lidas += 1
-
-        idx_equip = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("FROTA", "EQUIP", "TAG"))), 0)
-        idx_inicio = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("INICIO", "INÍCIO"))), None)
-        idx_fim = next((i for i, h in enumerate(cabecalhos) if "FIM" in h), None)
-        idx_comentario = next((i for i, h in enumerate(cabecalhos) if "COMENT" in h), None)
-        if idx_comentario is None:
-            idx_comentario = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("FALHA", "MOTIVO", "DESCR"))), None)
-        idx_esp = next((i for i, h in enumerate(cabecalhos) if "ESPEC" in h), None)
-        if idx_esp is None:
-            idx_esp = next((i for i, h in enumerate(cabecalhos) if h == "DESCRICAO" or h == "DESCRIÇÃO"), None)
-        idx_mec = next((i for i, h in enumerate(cabecalhos) if any(k in h for k in ("EXECUT", "MECANIC", "MECÂNIC", "NOME_OPERADOR"))), None)
-        idx_mat = next((i for i, h in enumerate(cabecalhos) if "MATRIC" in h or "MATRÍC" in h or h == "OPERADOR"), None)
-        idx_hor = next((i for i, h in enumerate(cabecalhos) if "HORIM" in h or "HORÍM" in h), None)
-        idx_tipo = next((i for i, h in enumerate(cabecalhos) if "TIPO" in h or h == "ESTADO"), None)
-        idx_cat = next((i for i, h in enumerate(cabecalhos) if "CATEG" in h or "GRUPO" in h or "FROTA_DESC" in h), None)
-        idx_local = next((i for i, h in enumerate(cabecalhos) if h == "LOCAL"), None)
-        idx_dur = next((i for i, h in enumerate(cabecalhos) if "DURAC" in h or "DURAÇ" in h or "MINUT" in h), None)
-
-        for row in ws.iter_rows(min_row=linha_cabecalho + 1, values_only=True):
-            if not row:
-                continue
-
-            equip_val = row[idx_equip] if idx_equip is not None and idx_equip < len(row) else None
-            inicio_val = row[idx_inicio] if idx_inicio is not None and idx_inicio < len(row) else None
-            fim_val = row[idx_fim] if idx_fim is not None and idx_fim < len(row) else None
-
-            equip_str = str(equip_val).strip() if equip_val is not None else ""
-            inicio_str = _formatar_data(inicio_val)
-            fim_str = _formatar_data(fim_val) if fim_val not in (None, "") else ""
-
-            if not equip_str or not inicio_str:
-                continue
-
-            comentario_val = row[idx_comentario] if idx_comentario is not None and idx_comentario < len(row) else None
-            esp_val = row[idx_esp] if idx_esp is not None and idx_esp < len(row) else None
-            mec_val = row[idx_mec] if idx_mec is not None and idx_mec < len(row) else None
-            mat_val = row[idx_mat] if idx_mat is not None and idx_mat < len(row) else None
-            hor_val = row[idx_hor] if idx_hor is not None and idx_hor < len(row) else None
-            tipo_val = row[idx_tipo] if idx_tipo is not None and idx_tipo < len(row) else None
-            cat_val = row[idx_cat] if idx_cat is not None and idx_cat < len(row) else None
-            local_val = row[idx_local] if idx_local is not None and idx_local < len(row) else None
-            dur_val = row[idx_dur] if idx_dur is not None and idx_dur < len(row) else None
-
-            try:
-                duracao_min = round(float(dur_val), 2) if dur_val not in (None, "") else _calcular_duracao_minutos(inicio_val)
-            except (ValueError, TypeError):
-                duracao_min = _calcular_duracao_minutos(inicio_val)
-
-            item = {
-                "equipamento": equip_str,
-                "categoria": _inferir_categoria(equip_str, cat_val),
-                "inicio": inicio_str,
-                "fim": fim_str if fim_str not in ("None", "nan", "-") else "",
-                "duracaoMin": duracao_min,
-                "especialidade": str(esp_val).strip() if esp_val not in (None, "") else "MANUTENÇÃO",
-                "mecanico": str(mec_val).strip() if mec_val not in (None, "") else "-",
-                "matricula": str(mat_val).strip() if mat_val not in (None, "") else "-",
-                "horimetro": str(hor_val).strip() if hor_val not in (None, "") else "-",
-                "tipo": str(tipo_val).strip().capitalize() if tipo_val not in (None, "") else "Corretiva",
-                "local": str(local_val).strip() if local_val not in (None, "") else "OFICINA FAGUNDES",
-                "motivo": str(comentario_val).strip() if comentario_val not in (None, "") else "SEM COMENTÁRIO"
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            fg: {
+              base: '#090c12',
+              surface: '#10151e',
+              elevated: '#161d29',
+              border: '#232d3d',
+              blue: '#00379e',
+              blueHover: '#0047cc',
+              gray: '#98989a',
+              green: '#95d324',
             }
-
-            if item["fim"] == "":
-                em_manutencao.append(item)
-            else:
-                if equip_str not in historico_por_frota:
-                    historico_por_frota[equip_str] = []
-                historico_por_frota[equip_str].append({
-                    "data": item["fim"],
-                    "inicio": item["inicio"],
-                    "fim": item["fim"],
-                    "duracaoMin": item["duracaoMin"],
-                    "tipo": item["tipo"],
-                    "especialidade": item["especialidade"],
-                    "falha": item["motivo"],
-                    "servico": item["especialidade"],
-                    "pecas": "-",
-                    "horimetro": item["horimetro"],
-                    "executante": f"{item['mecanico']} ({item['matricula']})" if item['matricula'] != '-' else item['mecanico']
-                })
-
-    wb.close()
-    return em_manutencao, historico_por_frota, abas_lidas
-
-
-def _obter_dados_planilha(forcar=False):
-    agora = time.time()
-    if not forcar and _CACHE_PLANILHA["dados"] is not None and (agora - _CACHE_PLANILHA["timestamp"] < CACHE_TTL_SEGUNDOS):
-        return _CACHE_PLANILHA["dados"], _CACHE_PLANILHA["historico_por_frota"]
-
-    wb = None
-    fonte = "nenhuma"
-
-    if PUBLIC_FILE_ID:
-        try:
-            conteudo = _baixar_conteudo_drive(PUBLIC_FILE_ID)
-            wb = openpyxl.load_workbook(io.BytesIO(conteudo), data_only=True, read_only=True)
-            fonte = "google_drive"
-        except Exception as e:
-            if not os.path.exists(LOCAL_XLSM_PATH):
-                raise RuntimeError(f"Falha ao ler planilha do Google Drive: {str(e)}")
-            print(f"Aviso Google Drive: {e}. Usando fallback local.")
-
-    if wb is None and os.path.exists(LOCAL_XLSM_PATH):
-        try:
-            wb = openpyxl.load_workbook(LOCAL_XLSM_PATH, data_only=True, read_only=True)
-            fonte = f"local ({LOCAL_XLSM_PATH})"
-        except Exception as e:
-            raise RuntimeError(f"Erro ao ler arquivo local: {str(e)}")
-
-    if wb is None:
-        raise RuntimeError("Nenhuma planilha encontrada. Configure PUBLIC_FILE_ID ou verifique o arquivo local.")
-
-    em_manutencao, historico_por_frota, abas_lidas = _processar_workbook(wb)
-    if abas_lidas == 0:
-        raise RuntimeError("Nenhuma aba tem as colunas esperadas (equipamento, inicio e fim).")
-
-    resultado = {
-        "total": len(em_manutencao),
-        "equipamentos": em_manutencao,
-        "fonte": fonte
-    }
-
-    _CACHE_PLANILHA["timestamp"] = agora
-    _CACHE_PLANILHA["dados"] = resultado
-    _CACHE_PLANILHA["historico_por_frota"] = historico_por_frota
-
-    return resultado, historico_por_frota
-
-
-# =============================================================================
-# USUÁRIOS E ACESSOS (COM PERSISTÊNCIA REMOTA NO APPS SCRIPT / GOOGLE DRIVE)
-# =============================================================================
-PERFIS = {
-    "ENCARREGADO": ["quadro", "os"],
-    "MECANICO": ["quadro", "minhas-os"],
-    "CONTROLADOR": ["quadro", "pendencias"],
-    "ADMINISTRADOR": ["quadro", "os", "minhas-os", "pendencias", "acessos"],
-}
-LOGIN_RE = re.compile(r"^[a-z0-9._-]{3,30}$")
-SENHA_MIN = 3
-
-_users_lock = threading.RLock()
-_users_cache = {"carregado": False, "usuarios": {}}
-_tentativas = {}
-
-
-def _agora_iso():
-    return _agora_local().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _admin_padrao():
-    return {
-        "login": "admin",
-        "nome": "Administrador Geral",
-        "matricula": "0001",
-        "perfil": "ADMINISTRADOR",
-        "senha_hash": generate_password_hash("123"),
-        "ativo": True,
-        "trocar_senha": True,
-        "criado_em": _agora_iso(),
-        "ultimo_acesso": "",
-    }
-
-
-def _ler_arquivo_usuarios():
-    try:
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
-            dados = json.load(f)
-        return dados if isinstance(dados, dict) else None
-    except (OSError, ValueError):
-        return None
-
-
-def _apps_script_usuarios(acao, payload=None):
-    if not APPS_SCRIPT_URL:
-        print("[USUÁRIOS] APPS_SCRIPT_URL não configurada no ambiente!")
-        return None
-    corpo = {"tipo": acao, "token": USERS_SYNC_TOKEN}
-    if payload is not None:
-        corpo["usuarios"] = payload
-    try:
-        res = requests.post(APPS_SCRIPT_URL, json=corpo, timeout=25)
-        res.raise_for_status()
-        data = res.json()
-        if data.get("status") == "sucesso":
-            return data
-        print(f"[USUÁRIOS] Apps Script recusou ({acao}): {data}")
-    except Exception as e:
-        print(f"[USUÁRIOS] Erro ao conectar no Apps Script ({acao}): {e}")
-    return None
-
-
-def _carregar_usuarios():
-    """Lê usuários do Apps Script (persistente no Render) ou do arquivo local."""
-    with _users_lock:
-        if _users_cache["carregado"]:
-            return _users_cache["usuarios"]
-
-        usuarios = None
-        remoto = _apps_script_usuarios("usuarios_carregar")
-        if remoto and isinstance(remoto.get("usuarios"), dict) and len(remoto["usuarios"]) > 0:
-            usuarios = remoto["usuarios"]
-            _persistir_usuarios(usuarios, remoto=False)
-
-        if not usuarios:
-            usuarios = _ler_arquivo_usuarios()
-
-        if not usuarios:
-            usuarios = {"admin": _admin_padrao()}
-            _persistir_usuarios(usuarios, remoto=True)
-
-        _users_cache["usuarios"] = usuarios
-        _users_cache["carregado"] = True
-        return usuarios
-
-
-def _persistir_usuarios(usuarios, remoto=True):
-    try:
-        tmp = USERS_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(usuarios, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, USERS_FILE)
-    except OSError as e:
-        print(f"Aviso: não foi possível gravar {USERS_FILE}: {e}")
-    if remoto:
-        res = _apps_script_usuarios("usuarios_salvar", usuarios)
-        if not res:
-            print("[CRÍTICO] Usuários salvos apenas localmente! Ao reiniciar o servidor serão perdidos.")
-
-
-def _usuario_publico(u):
-    return {
-        "login": u["login"],
-        "nome": u["nome"],
-        "matricula": u.get("matricula", ""),
-        "perfil": u["perfil"],
-        "abas": PERFIS.get(u["perfil"], ["quadro"]),
-        "ativo": bool(u.get("ativo", True)),
-        "trocarSenha": bool(u.get("trocar_senha", False)),
-        "criadoEm": u.get("criado_em", ""),
-        "ultimoAcesso": u.get("ultimo_acesso", ""),
-    }
-
-
-def _usuario_logado():
-    login = session.get("login")
-    if not login:
-        return None
-    u = _carregar_usuarios().get(login)
-    if not u or not u.get("ativo", True):
-        session.clear()
-        return None
-    return u
-
-
-def exigir_login(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if not _usuario_logado():
-            return jsonify({"erro": "Sessão expirada. Entre novamente."}), 401
-        return f(*args, **kwargs)
-    return wrapper
-
-
-def exigir_admin(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        u = _usuario_logado()
-        if not u:
-            return jsonify({"erro": "Sessão expirada. Entre novamente."}), 401
-        if u["perfil"] != "ADMINISTRADOR":
-            return jsonify({"erro": "Apenas o administrador pode fazer isso."}), 403
-        return f(*args, **kwargs)
-    return wrapper
-
-
-def _qtd_admins_ativos(usuarios, ignorar=None):
-    return sum(
-        1 for l, u in usuarios.items()
-        if l != ignorar and u["perfil"] == "ADMINISTRADOR" and u.get("ativo", True)
-    )
-
-
-def _validar_senha(senha):
-    if not isinstance(senha, str) or len(senha) < SENHA_MIN:
-        return f"A senha precisa ter pelo menos {SENHA_MIN} caracteres."
-    return None
-
-
-@app.route("/api/login", methods=["POST"])
-def api_login():
-    dados = request.get_json(silent=True) or {}
-    login = str(dados.get("login", "")).strip().lower()
-    senha = str(dados.get("senha", ""))
-    chave = f"{request.remote_addr}|{login}"
-    falhas, ate = _tentativas.get(chave, (0, 0))
-    if ate > time.time():
-        restante = int(ate - time.time()) // 60 + 1
-        return jsonify({"erro": f"Muitas tentativas. Aguarde {restante} min e tente de novo."}), 429
-
-    usuarios = _carregar_usuarios()
-    u = usuarios.get(login)
-    hash_ref = u["senha_hash"] if u else generate_password_hash("invalido")
-    ok = check_password_hash(hash_ref, senha) and u is not None
-    if not ok:
-        falhas += 1
-        _tentativas[chave] = (falhas, time.time() + 300 if falhas >= 5 else 0)
-        return jsonify({"erro": "Usuário ou senha inválidos."}), 401
-    if not u.get("ativo", True):
-        return jsonify({"erro": "Este acesso está bloqueado. Fale com o administrador."}), 403
-
-    _tentativas.pop(chave, None)
-    with _users_lock:
-        u["ultimo_acesso"] = _agora_iso()
-        _persistir_usuarios(usuarios, remoto=False)
-    session.clear()
-    session.permanent = True
-    session["login"] = login
-    return jsonify({"usuario": _usuario_publico(u)})
-
-
-@app.route("/api/logout", methods=["POST"])
-def api_logout():
-    session.clear()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/me", methods=["GET"])
-def api_me():
-    u = _usuario_logado()
-    if not u:
-        return jsonify({"usuario": None})
-    return jsonify({"usuario": _usuario_publico(u)})
-
-
-@app.route("/api/status-persistencia", methods=["GET"])
-@exigir_admin
-def api_status_persistencia():
-    teste = _apps_script_usuarios("usuarios_carregar")
-    return jsonify({
-        "apps_script_configurado": bool(APPS_SCRIPT_URL),
-        "token_configurado": bool(USERS_SYNC_TOKEN),
-        "conectado_drive": teste is not None,
-        "qtd_usuarios_remoto": len(teste.get("usuarios", {})) if teste else 0
-    })
-
-
-@app.route("/api/me/senha", methods=["POST"])
-@exigir_login
-def api_trocar_propria_senha():
-    u = _usuario_logado()
-    dados = request.get_json(silent=True) or {}
-    if not check_password_hash(u["senha_hash"], str(dados.get("senhaAtual", ""))):
-        return jsonify({"erro": "Senha atual incorreta."}), 400
-    nova = str(dados.get("novaSenha", ""))
-    erro = _validar_senha(nova)
-    if erro:
-        return jsonify({"erro": erro}), 400
-    if nova == str(dados.get("senhaAtual", "")):
-        return jsonify({"erro": "A nova senha precisa ser diferente da atual."}), 400
-    with _users_lock:
-        u["senha_hash"] = generate_password_hash(nova)
-        u["trocar_senha"] = False
-        _persistir_usuarios(_carregar_usuarios())
-    return jsonify({"usuario": _usuario_publico(u)})
-
-
-@app.route("/api/usuarios", methods=["GET"])
-@exigir_admin
-def api_listar_usuarios():
-    usuarios = _carregar_usuarios()
-    lista = sorted(usuarios.values(), key=lambda x: (x["perfil"] != "ADMINISTRADOR", x["nome"].lower()))
-    return jsonify({"usuarios": [_usuario_publico(u) for u in lista]})
-
-
-@app.route("/api/usuarios/mecanicos", methods=["GET"])
-@exigir_login
-def api_listar_mecanicos():
-    usuarios = _carregar_usuarios()
-    lista = [
-        {"login": u["login"], "nome": u["nome"], "matricula": u.get("matricula", "")}
-        for u in usuarios.values() if u["perfil"] == "MECANICO" and u.get("ativo", True)
-    ]
-    lista.sort(key=lambda x: x["nome"].lower())
-    return jsonify({"mecanicos": lista})
-
-
-@app.route("/api/usuarios", methods=["POST"])
-@exigir_admin
-def api_criar_usuario():
-    dados = request.get_json(silent=True) or {}
-    login = str(dados.get("login", "")).strip().lower()
-    nome = str(dados.get("nome", "")).strip()
-    perfil = str(dados.get("perfil", "")).strip().upper()
-    matricula = str(dados.get("matricula", "")).strip()[:20]
-    senha = str(dados.get("senha", ""))
-
-    if not LOGIN_RE.match(login):
-        return jsonify({"erro": "Login: 3 a 30 caracteres, só letras minúsculas, números, ponto, hífen ou _."}), 400
-    if len(nome) < 3:
-        return jsonify({"erro": "Informe o nome completo."}), 400
-    if perfil not in PERFIS:
-        return jsonify({"erro": "Perfil inválido."}), 400
-    erro = _validar_senha(senha)
-    if erro:
-        return jsonify({"erro": erro}), 400
-
-    with _users_lock:
-        usuarios = _carregar_usuarios()
-        if login in usuarios:
-            return jsonify({"erro": "Já existe um usuário com esse login."}), 409
-        usuarios[login] = {
-            "login": login,
-            "nome": nome[:80],
-            "matricula": matricula,
-            "perfil": perfil,
-            "senha_hash": generate_password_hash(senha),
-            "ativo": True,
-            "trocar_senha": bool(dados.get("trocarSenha", True)),
-            "criado_em": _agora_iso(),
-            "ultimo_acesso": "",
+          }
         }
-        _persistir_usuarios(usuarios)
-        return jsonify({"usuario": _usuario_publico(usuarios[login])}), 201
+      }
+    };
+  </script>
+
+  <style>
+    :root {
+      --fg-bg-base: #090c12;
+      --fg-bg-surface: #10151e;
+      --fg-bg-elevated: #161d29;
+      --fg-border: #232d3d;
+      --fg-blue: #00379e;
+      --fg-gray: #98989a;
+      --fg-green: #95d324;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--fg-bg-base);
+      background-image:
+        linear-gradient(rgba(152, 152, 154, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(152, 152, 154, 0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+      color: #f3f4f6;
+      margin: 0;
+      overflow-x: hidden;
+    }
+
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .corp-card {
+      background-color: var(--fg-bg-surface);
+      border: 1px solid var(--fg-border);
+      box-shadow: 0 10px 25px -10px rgba(0, 0, 0, 0.7);
+    }
+
+    .tabela-qha-industrial {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      background-color: #f4f5f7;
+      color: #111827;
+    }
+
+    .tabela-qha-industrial thead th {
+      background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
+      color: #111827;
+      font-weight: 700;
+      text-align: left;
+      padding: 8px 11px;
+      border-right: 1px solid #9ca3af;
+      border-bottom: 1px solid #6b7280;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .tabela-qha-industrial tbody tr {
+      background-color: #ffffff;
+      border-bottom: 1px solid #d1d5db;
+      cursor: pointer;
+      transition: background-color 0.12s ease;
+    }
+
+    .tabela-qha-industrial tbody tr:nth-child(even) {
+      background-color: #eef1f5;
+    }
+
+    .tabela-qha-industrial tbody tr:hover {
+      background-color: #dce4ee;
+    }
+
+    .tabela-qha-industrial tbody tr.linha-selecionada {
+      background-color: #47657d !important;
+      color: #ffffff !important;
+    }
+
+    .tabela-qha-industrial tbody td {
+      padding: 6px 10px;
+      border-right: 1px solid #d1d5db;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .celula-vermelha-qha {
+      background-color: #e60000 !important;
+      color: #ffffff !important;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .linha-selecionada .celula-vermelha-qha {
+      background-color: #47657d !important;
+      color: #ffffff !important;
+    }
+
+    @keyframes pulso-corporativo {
+      0%, 100% {
+        border-color: #95d324;
+        box-shadow: 0 0 0 0 rgba(149, 211, 36, 0.25);
+      }
+      50% {
+        border-color: #b5ef48;
+        box-shadow: 0 0 20px 3px rgba(149, 211, 36, 0.2);
+      }
+    }
+
+    .banner-liberacao-corp {
+      background-color: #111a12;
+      border: 1px solid #95d324;
+      border-left-width: 5px;
+      animation: pulso-corporativo 2s infinite ease-in-out;
+    }
+
+    /* MODO TV FIXO (TODOS OS EQUIPAMENTOS NA TELA SEM ROLAGEM) */
+    body.modo-tv-ativo {
+      overflow: hidden !important;
+      background: #ffffff;
+    }
+    body.modo-tv-ativo header,
+    body.modo-tv-ativo #banner-alerta-saida,
+    body.modo-tv-ativo #aba-quadro > div:nth-child(1),
+    body.modo-tv-ativo #aba-quadro > div:nth-child(2),
+    body.modo-tv-ativo #aba-quadro > div:nth-child(3) > div:first-child {
+      display: none !important;
+    }
+    body.modo-tv-ativo main {
+      max-width: 100% !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      height: 100vh !important;
+    }
+    body.modo-tv-ativo #aba-quadro,
+    body.modo-tv-ativo #aba-quadro > div:nth-child(3) {
+      border: none !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+      box-shadow: none !important;
+      height: 100vh !important;
+    }
+    body.modo-tv-ativo #aba-quadro .overflow-x-auto {
+      height: 100vh !important;
+      max-height: 100vh !important;
+      overflow: hidden !important;
+    }
+    body.modo-tv-ativo .tabela-qha-industrial {
+      height: 100vh !important;
+      width: 100% !important;
+      table-layout: fixed;
+    }
+    body.modo-tv-ativo .tabela-qha-industrial thead th {
+      padding: 6px 10px !important;
+      font-size: 13px !important;
+      line-height: 1.1 !important;
+    }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(1) { width: 8%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(2) { width: 12%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(3) { width: 27%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(4) { width: 11%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(5) { width: 10%; }
+    body.modo-tv-ativo .tabela-qha-industrial th:nth-child(6) { width: 32%; }
+
+    body.modo-tv-ativo .tabela-qha-industrial tbody td {
+      padding: 0 10px !important;
+      line-height: 1.05 !important;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    body.modo-tv-ativo #btn-sair-modo-tv {
+      display: inline-flex !important;
+      position: fixed;
+      bottom: 8px;
+      right: 8px;
+      z-index: 9999;
+      opacity: 0.2;
+      transition: opacity 0.2s ease;
+    }
+    body.modo-tv-ativo #btn-sair-modo-tv:hover {
+      opacity: 1;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090c12;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #232d3d;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #00379e;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-[#00379e] selection:text-white">
+
+  <!-- ===================================================================== -->
+  <!-- 1. TELA DE LOGIN CORPORATIVA                                          -->
+  <!-- ===================================================================== -->
+  <div id="tela-login" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-lg corp-card rounded-2xl overflow-hidden border-t-4 border-t-[#00379e]">
+      <div class="bg-[#131924] px-7 py-6 border-b border-[#232d3d]">
+        <div class="flex items-center justify-between gap-4 mb-4 pb-4 border-b border-[#232d3d]/80">
+          <svg class="h-10 w-auto" viewBox="0 0 265 56" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fagundes Construção e Mineração">
+            <rect x="0" y="4" width="48" height="48" rx="8" fill="#00379e"/>
+            <path d="M13 15H36V21.5H20.5V25.5H33V31.5H20.5V41H13V15Z" fill="#ffffff"/>
+            <polygon points="31,34 39,34 35,41 27,41" fill="#95d324"/>
+            <text x="60" y="30" fill="#ffffff" font-family="Inter, sans-serif" font-weight="800" font-size="22" letter-spacing="1.5">FAGUNDES</text>
+            <text x="61" y="44" fill="#98989a" font-family="Inter, sans-serif" font-weight="600" font-size="9.5" letter-spacing="1.8">CONSTRUÇÃO E MINERAÇÃO</text>
+          </svg>
+        </div>
+
+        <div>
+          <h1 class="text-lg font-extrabold tracking-tight text-white">
+            PAINEL DE MANUTENÇÃO &amp; OS <span class="text-[#95d324]">(QHA)</span>
+          </h1>
+          <p class="text-xs text-[#98989a] mt-1 flex items-center gap-1.5">
+            <span>Sincronização automática (10 min):</span>
+            <code class="bg-[#090c12] text-[#95d324] border border-[#232d3d] px-2 py-0.5 rounded font-mono-tech text-[11px]">manuntecao.xlsm • Google Drive</code>
+          </p>
+        </div>
+      </div>
+
+      <form id="form-login" class="p-7 space-y-4">
+        <div id="erro-login" class="hidden bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs font-medium px-3.5 py-2.5 rounded-lg flex items-center gap-2">
+          <span class="font-bold text-rose-400">!</span>
+          <span id="erro-login-texto">Usuário ou senha inválidos.</span>
+        </div>
+
+        <div>
+          <label for="input-usuario" class="block text-[11px] font-bold uppercase tracking-wider text-[#98989a] mb-1.5">
+            Usuário Corporativo
+          </label>
+          <input
+            type="text"
+            id="input-usuario"
+            autocomplete="username"
+            placeholder="Digite seu usuário"
+            class="w-full bg-[#090c12] border border-[#232d3d] focus:border-[#00379e] focus:ring-1 focus:ring-[#00379e] focus:outline-none rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-neutral-600 transition"
+            required
+          />
+        </div>
+
+        <div>
+          <label for="input-senha" class="block text-[11px] font-bold uppercase tracking-wider text-[#98989a] mb-1.5">
+            Senha de Acesso
+          </label>
+          <input
+            type="password"
+            id="input-senha"
+            autocomplete="current-password"
+            placeholder="Digite sua senha"
+            class="w-full bg-[#090c12] border border-[#232d3d] focus:border-[#00379e] focus:ring-1 focus:ring-[#00379e] focus:outline-none rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-neutral-600 transition"
+            required
+          />
+        </div>
+
+        <button
+          type="submit"
+          class="w-full bg-[#00379e] hover:bg-[#0047cc] active:scale-[0.99] text-white font-bold py-3 rounded-lg text-xs uppercase tracking-widest transition cursor-pointer shadow-md"
+        >
+          Acessar Sistema
+        </button>
+
+        <p class="pt-3 border-t border-[#232d3d] text-[10px] text-center text-[#98989a]">
+          Não tem acesso? Peça ao administrador para criar o seu usuário.
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 2. SISTEMA PRINCIPAL CORPORATIVO                                      -->
+  <!-- ===================================================================== -->
+  <div id="tela-sistema" class="hidden flex-1 flex flex-col">
+
+    <!-- Cabeçalho Superior -->
+    <header class="bg-[#10151e] border-b border-[#232d3d] sticky top-0 z-30">
+      <div class="h-1 w-full bg-[#00379e]"></div>
+      <div class="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3.5">
+          <svg class="h-9 w-auto shrink-0" viewBox="0 0 185 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fagundes">
+            <rect x="0" y="2" width="44" height="44" rx="7" fill="#00379e"/>
+            <path d="M12 12H33V18H19V22H30.5V27.5H19V36H12V12Z" fill="#ffffff"/>
+            <polygon points="28.5,29.5 35.5,29.5 32,36 25,36" fill="#95d324"/>
+            <text x="54" y="25" fill="#ffffff" font-family="Inter, sans-serif" font-weight="800" font-size="18" letter-spacing="1.2">FAGUNDES</text>
+            <text x="55" y="37" fill="#98989a" font-family="Inter, sans-serif" font-weight="600" font-size="7.5" letter-spacing="1.3">CONSTRUÇÃO E MINERAÇÃO</text>
+          </svg>
+
+          <div class="hidden sm:block h-8 w-px bg-[#232d3d]"></div>
+
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 class="text-sm sm:text-base font-extrabold tracking-tight text-white">
+                PAINEL DE MANUTENÇÃO &amp; OS <span class="text-[#95d324]">(QHA)</span>
+              </h1>
+              <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-[#090c12] text-neutral-300 border border-[#232d3d] px-2.5 py-0.5 rounded">
+                <span class="w-1.5 h-1.5 rounded-full bg-[#95d324] animate-pulse"></span>
+                manuntecao.xlsm • Sincronizado
+              </span>
+            </div>
+            <p class="text-[11px] text-[#98989a] mt-0.5">
+              Controle de Manutenção, Ordens de Serviço e Logs no Google Drive
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            id="btn-modo-tv"
+            class="flex items-center gap-1.5 bg-[#00379e] hover:bg-[#0047cc] text-white font-bold text-xs px-3 py-2 rounded-lg transition cursor-pointer shadow"
+            title="Expandir Quadro QHA para exibição em Televisão"
+          >
+            <span>📺</span>
+            <span>Modo TV</span>
+          </button>
+
+          <button
+            type="button"
+            id="btn-testar-sirene"
+            class="flex items-center gap-1.5 bg-[#161d29] hover:bg-[#1f293a] border border-[#232d3d] text-neutral-200 font-semibold text-xs px-3 py-2 rounded-lg transition cursor-pointer"
+          >
+            <span class="text-[#95d324]">🚨</span>
+            <span class="hidden md:inline">Testar Sirene LFO</span>
+          </button>
+
+          <div class="flex items-center gap-2 bg-[#090c12] border border-[#232d3d] px-3 py-1.5 rounded-lg">
+            <div id="header-avatar-sigla" class="w-7 h-7 rounded bg-[#00379e] flex items-center justify-center text-xs font-bold text-white">
+              OP
+            </div>
+            <div>
+              <div id="header-nome-usuario" class="text-xs font-bold text-white leading-tight">Usuário</div>
+              <div id="header-badge-perfil" class="text-[10px] font-mono-tech uppercase text-[#95d324] leading-tight">PERFIL</div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="btn-minha-senha"
+            class="bg-[#161d29] hover:bg-[#1f293a] border border-[#232d3d] text-neutral-200 font-semibold text-xs px-3.5 py-2 rounded-lg transition cursor-pointer"
+          >
+            Minha Senha
+          </button>
+
+          <button
+            type="button"
+            id="btn-sair-login"
+            class="bg-[#161d29] hover:bg-[#00379e] border border-[#232d3d] hover:border-[#00379e] text-neutral-200 hover:text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition cursor-pointer"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+
+      <!-- Barra de Abas (Estrita por Perfil) -->
+      <nav id="barra-abas" class="max-w-[1600px] mx-auto px-4 flex flex-wrap items-center gap-1.5 border-t border-[#1b2330] py-2"></nav>
+    </header>
+
+    <!-- Banner Corporativo de Liberação Automática (Pantone 375 C) -->
+    <div id="banner-alerta-saida" class="hidden max-w-[1600px] w-full mx-auto px-4 pt-4">
+      <div class="banner-liberacao-corp text-white rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-lg bg-[#95d324]/15 border border-[#95d324]/50 text-[#95d324] flex items-center justify-center font-bold text-base shrink-0">
+            ✓
+          </div>
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-[#95d324]">
+              Baixa Sincronizada • Coluna "Fim" Preenchida em manuntecao.xlsm
+            </div>
+            <div id="banner-alerta-titulo" class="text-base font-bold text-white mt-0.5">
+              EQUIPAMENTO LIBERADO DO QHA E EXCLUÍDO DA FILA
+            </div>
+            <div id="banner-alerta-detalhe" class="text-xs text-neutral-300 mt-0.5"></div>
+          </div>
+        </div>
+        <button
+          type="button"
+          id="btn-fechar-banner"
+          class="bg-[#161d29] hover:bg-[#1f293a] text-neutral-200 text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-lg border border-[#232d3d] transition cursor-pointer shrink-0"
+        >
+          Ciente • Fechar
+        </button>
+      </div>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 space-y-5">
+
+      <!-- =================================================================== -->
+      <!-- ABA 1: QUADRO DE MANUTENÇÕES (QHA) - SEM FILTRO DE LOCAL            -->
+      <!-- =================================================================== -->
+      <section id="aba-quadro" class="hidden space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="corp-card rounded-xl p-4 border-l-4 border-l-[#00379e] flex items-center justify-between">
+            <div>
+              <span class="text-[11px] font-bold uppercase tracking-wider text-[#98989a]">Equipamentos em Manutenção (Sem Horário Fim)</span>
+              <div class="mt-1.5 flex items-baseline gap-3">
+                <span id="kpi-total-manutencao" class="text-3xl font-extrabold text-white font-mono-tech">0</span>
+                <span class="text-xs text-[#98989a]">unidades ativas no QHA</span>
+              </div>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-[#00379e]/20 border border-[#00379e]/50 flex items-center justify-center text-xl">
+              🚜
+            </div>
+          </div>
+
+          <div class="corp-card rounded-xl p-4 border-l-4 border-l-[#95d324] flex items-center justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-[#95d324]"></span>
+                <span class="text-xs font-bold text-white font-mono-tech">manuntecao.xlsm</span>
+              </div>
+              <div class="mt-1 text-xs text-[#98989a]">
+                Atualizado: <strong id="kpi-ultima-atualizacao" class="text-white font-mono-tech">--:--:--</strong>
+              </div>
+            </div>
+            <button type="button" id="btn-sincronizar-planilha-real" class="px-3 py-2 rounded-lg bg-[#161d29] hover:bg-[#00379e] border border-[#232d3d] text-xs font-bold text-white cursor-pointer transition shrink-0">
+              ↻ Sincronizar
+            </button>
+          </div>
+        </div>
+
+        <div class="corp-card rounded-xl p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <input
+            type="text"
+            id="qha-busca-texto"
+            placeholder="Buscar por frota, especialidade ou comentário..."
+            class="w-full lg:max-w-sm bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:border-[#00379e] focus:outline-none"
+          />
+        </div>
+
+        <div class="corp-card rounded-xl overflow-hidden">
+          <div class="bg-[#161d29] px-4 py-2.5 border-b border-[#232d3d] flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-extrabold uppercase tracking-wider text-white">Quadro de Manutenções Ativas (QHA)</span>
+              <span id="qha-contador-filtrado" class="px-2 py-0.5 rounded bg-[#090c12] border border-[#232d3d] font-mono-tech text-[11px] text-[#95d324]">0 itens</span>
+            </div>
+            <span class="text-[11px] text-[#98989a]">Clique em qualquer linha para abrir o <strong class="text-white">Histórico Técnico</strong> do equipamento</span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="tabela-qha-industrial">
+              <thead>
+                <tr>
+                  <th>Nome ▲</th>
+                  <th>Status</th>
+                  <th>Estado</th>
+                  <th>Duração (minutos)</th>
+                  <th>Duração (horas)</th>
+                  <th>Comentário</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-qha-industrial"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- =================================================================== -->
+      <!-- ABA 2: ORDENS DE SERVIÇO (ENCARREGADO / ADMIN)                      -->
+      <!-- =================================================================== -->
+      <section id="aba-os" class="hidden space-y-5">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <div class="lg:col-span-5 corp-card rounded-2xl p-5 space-y-4">
+            <div class="border-b border-[#232d3d] pb-3">
+              <span class="text-[10px] font-bold uppercase tracking-widest text-[#95d324]">Abertura de Solicitação • Grava Log de Entrada no Drive</span>
+              <h2 class="text-base font-extrabold text-white mt-0.5">Abrir Nova Ordem de Serviço (OS)</h2>
+              <p class="text-xs text-[#98989a] mt-0.5">Direciona ao mecânico, salva foto + registro na aba <strong>Entrada</strong> e atualiza <code class="text-neutral-200">log_entrada_equipamentos.xlsx</code>.</p>
+            </div>
+
+            <form id="form-nova-os" class="space-y-3.5">
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Frota / Equipamento *</label>
+                  <select id="os-frota" required class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs font-mono-tech text-white focus:border-[#00379e] focus:outline-none"></select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Tipo de Manutenção *</label>
+                  <select id="os-tipo" required class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+                    <option value="Corretiva">Corretiva</option>
+                    <option value="Preventiva">Preventiva</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Especialidade *</label>
+                  <select id="os-especialidade" required class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+                    <option value="MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA">205 • Corretiva Mecânica</option>
+                    <option value="MANUTENCAO 206 MANUTENCAO CORRETIVA ELETRICA">206 • Corretiva Elétrica</option>
+                    <option value="MANUTENCAO 207 MANUTENCAO PREVENTIVA">207 • Preventiva</option>
+                    <option value="MANUTENCAO 204 MANUTENCAO BORRACHARIA">204 • Borracharia</option>
+                    <option value="MANUTENCAO 210 MANUTENCAO SISTEMA DE BASCULA">210 • Sistema de Báscula</option>
+                    <option value="MANUTENCAO 214 MANUTENCAO AR CONDICIONADO">214 • Ar Condicionado</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Mecânico Destinado *</label>
+                  <select id="os-mecanico" required class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+                    <option value="">Carregando mecânicos...</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Comentário / Sintoma da Falha *</label>
+                <textarea id="os-descricao" rows="2" required placeholder="Ex: Vazamento hidráulico no comando principal..." class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:border-[#00379e] focus:outline-none"></textarea>
+              </div>
+
+              <!-- Evidência Fotográfica -->
+              <div class="bg-[#161d29] border border-dashed border-[#232d3d] rounded-xl p-3 space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-[11px] font-bold text-white">📷 Foto da Falha (Salva em Fotos_Manutencao)</span>
+                  <div class="flex items-center gap-1.5">
+                    <button type="button" id="btn-foto-simulada" class="px-2.5 py-1 rounded bg-[#090c12] hover:bg-[#1f293a] border border-[#232d3d] text-[11px] font-semibold text-[#95d324] cursor-pointer">
+                      Gerar Foto Teste
+                    </button>
+                    <label class="px-2.5 py-1 rounded bg-[#00379e] hover:bg-[#0047cc] text-[11px] font-semibold text-white cursor-pointer">
+                      Câmera / Arquivo
+                      <input type="file" id="os-foto-input" accept="image/*" capture="environment" class="hidden" />
+                    </label>
+                  </div>
+                </div>
+                <div id="os-foto-preview-wrap" class="hidden flex items-center gap-2.5 bg-[#090c12] p-2 rounded-lg border border-[#232d3d]">
+                  <img id="os-foto-preview-img" src="" alt="Prévia da falha" class="w-12 h-12 object-cover rounded border border-[#232d3d]" />
+                  <div class="flex-1 min-w-0">
+                    <div id="os-foto-nome" class="text-[11px] font-semibold text-white truncate">evidencia_campo.png</div>
+                    <div class="text-[10px] text-[#95d324]">Anexada à OS (pronta para Google Drive)</div>
+                  </div>
+                  <button type="button" id="btn-remover-foto" class="text-[11px] text-rose-400 hover:text-rose-300 font-bold px-1.5 cursor-pointer">✕</button>
+                </div>
+              </div>
+
+              <button type="submit" id="btn-submit-nova-os" class="w-full bg-[#00379e] hover:bg-[#0047cc] text-white font-bold py-2.5 rounded-lg text-xs uppercase tracking-wider transition cursor-pointer shadow">
+                Emitir OS &amp; Gravar Log de Entrada no Drive
+              </button>
+            </form>
+          </div>
+
+          <div class="lg:col-span-7 corp-card rounded-2xl p-5 flex flex-col">
+            <div class="flex items-center justify-between border-b border-[#232d3d] pb-3 mb-3">
+              <div>
+                <h3 class="text-sm font-extrabold uppercase tracking-wider text-white">Ordens de Serviço Emitidas</h3>
+                <p class="text-xs text-[#98989a]">Acompanhamento de execução e histórico técnico por equipamento</p>
+              </div>
+              <span id="contador-os-geral" class="px-2.5 py-1 rounded bg-[#090c12] border border-[#232d3d] font-mono-tech text-xs text-[#95d324]">0 OS</span>
+            </div>
+
+            <div id="lista-os-encarregado" class="space-y-2.5 overflow-y-auto max-h-[540px] pr-1"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =================================================================== -->
+      <!-- ABA 3: MINHAS OS (DESTINADAS) - FORMATO LISTA ÚNICA COMPACTA (MEC)  -->
+      <!-- =================================================================== -->
+      <section id="aba-minhas-os" class="hidden space-y-4">
+        <div class="corp-card rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#95d324]"></span>
+              <h2 class="text-base sm:text-lg font-extrabold text-white">Minhas OS (Destinadas) • Lista de Atendimento</h2>
+            </div>
+            <p class="text-xs text-[#98989a] mt-0.5">
+              Ao finalizar, o sistema grava o log de <strong>Retirada</strong> + foto no Google Drive e notifica o CCO.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="badge-mecanico-ativo" class="px-3 py-1.5 rounded-lg bg-[#161d29] border border-[#232d3d] text-xs font-mono-tech text-neutral-200">
+              —
+            </span>
+            <span id="contador-minhas-os" class="px-3 py-1.5 rounded-lg bg-[#00379e] text-white text-xs font-mono-tech font-bold">
+              0 Ativas
+            </span>
+          </div>
+        </div>
+
+        <div class="corp-card rounded-2xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-[#161d29] border-b border-[#232d3d] text-[11px] font-mono-tech uppercase text-[#98989a]">
+                  <th class="py-3 px-3.5">OS (#)</th>
+                  <th class="py-3 px-3.5">Frota</th>
+                  <th class="py-3 px-3.5">Tipo</th>
+                  <th class="py-3 px-3.5">Especialidade</th>
+                  <th class="py-3 px-3.5">Descrição / Comentário</th>
+                  <th class="py-3 px-3.5">Status</th>
+                  <th class="py-3 px-3.5 text-right">Histórico / Foto / Ação</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-lista-mecanico" class="divide-y divide-[#232d3d] text-xs bg-[#10151e]"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- =================================================================== -->
+      <!-- ABA 4: FILA DE PENDÊNCIAS AUTOMÁTICA (CONTROLADOR CCO)              -->
+      <!-- =================================================================== -->
+      <section id="aba-pendencias" class="hidden space-y-5">
+        <div class="corp-card rounded-2xl p-4 sm:p-5 border-l-4 border-l-[#00379e] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="px-2.5 py-0.5 rounded bg-[#00379e] text-white font-mono-tech text-[11px] font-bold">manuntecao.xlsm</span>
+              <span class="text-xs font-bold uppercase tracking-wider text-[#95d324]">Sincronização Automática a cada 10 minutos</span>
+            </div>
+            <h2 class="text-base sm:text-lg font-extrabold text-white">
+              Fila de Pendências CCO (Exclusão Automática via Colunas Início &amp; Fim)
+            </h2>
+            <p class="text-xs text-[#98989a]">
+              • <strong>Pendência de Entrada:</strong> Excluída automaticamente quando a frota aparece na planilha com <code class="text-white">Início</code> preenchido.<br/>
+              • <strong>Pendência de Baixa/Saída:</strong> Só libera do QHA e exclui da fila quando a linha da frota na planilha tiver o horário <code class="text-[#95d324]">Fim</code> preenchido.
+            </p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+            <div class="bg-[#090c12] border border-[#232d3d] rounded-xl px-3.5 py-2 text-right">
+              <div class="text-[10px] uppercase tracking-wider text-[#98989a]">Próxima Varredura (10m)</div>
+              <div id="cco-countdown-display" class="text-base font-extrabold font-mono-tech text-[#95d324]">10:00</div>
+            </div>
+
+            <button
+              type="button"
+              id="btn-varredura-agora"
+              class="px-4 py-3 rounded-xl bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] font-extrabold text-xs uppercase tracking-wider transition cursor-pointer shadow"
+            >
+              🔄 Executar Varredura 10 min Agora
+            </button>
+          </div>
+        </div>
+
+        <div class="corp-card rounded-2xl overflow-hidden">
+          <div class="bg-[#161d29] px-4 py-3 border-b border-[#232d3d] flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h3 class="text-xs font-extrabold uppercase tracking-wider text-white">Solicitações Aguardando Apontamento na Planilha</h3>
+              <span id="cco-pendencias-badge" class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono-tech text-[11px] font-bold">0 pendentes</span>
+            </div>
+            <span class="text-[11px] text-[#98989a] font-mono-tech">Baixa 100% via Excel</span>
+          </div>
+
+          <div id="lista-pendencias-cco" class="divide-y divide-[#232d3d]"></div>
+        </div>
+
+      </section>
+
+      <!-- =================================================================== -->
+      <!-- ABA 5: GESTÃO DE ACESSOS (EXCLUSIVO ADMINISTRADOR)                  -->
+      <!-- =================================================================== -->
+      <section id="aba-acessos" class="hidden space-y-4">
+        <div class="corp-card rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-widest text-[#95d324]">Administração de Segurança</span>
+            <h2 class="text-base font-extrabold text-white">Gestão de Usuários e Permissões de Acesso</h2>
+            <p class="text-xs text-[#98989a]">Crie, edite, bloqueie e redefina a senha dos acessos do Painel QHA &amp; Ordens de Serviço.</p>
+          </div>
+          <button type="button" id="btn-novo-usuario" class="bg-[#00379e] hover:bg-[#0047cc] text-white font-bold text-xs px-4 py-2.5 rounded-lg transition cursor-pointer whitespace-nowrap">
+            + Novo Usuário
+          </button>
+        </div>
+
+        <div id="aviso-senha-padrao" class="hidden bg-amber-950/40 border border-amber-500/50 text-amber-200 text-xs px-4 py-3 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span><strong>Atenção:</strong> você ainda está usando a senha inicial. Troque agora para proteger o painel.</span>
+          <button type="button" id="btn-aviso-trocar-senha" class="bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] px-3 py-1.5 rounded-lg cursor-pointer whitespace-nowrap">Trocar minha senha</button>
+        </div>
+
+        <div id="resumo-acessos" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></div>
+
+        <div class="corp-card rounded-2xl p-3 flex flex-col sm:flex-row gap-2.5">
+          <input type="search" id="busca-usuarios" placeholder="Buscar por nome, login ou matrícula..." class="flex-1 bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:border-[#00379e] focus:outline-none" />
+          <select id="filtro-perfil-usuarios" class="bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+            <option value="">Todos os perfis</option>
+            <option value="ADMINISTRADOR">Administrador</option>
+            <option value="ENCARREGADO">Encarregado</option>
+            <option value="MECANICO">Mecânico</option>
+            <option value="CONTROLADOR">Controlador (CCO)</option>
+          </select>
+          <select id="filtro-status-usuarios" class="bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+            <option value="">Todos os status</option>
+            <option value="ativo">Ativos</option>
+            <option value="bloqueado">Bloqueados</option>
+          </select>
+        </div>
+
+        <div class="corp-card rounded-2xl overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs min-w-[860px]">
+            <thead>
+              <tr class="bg-[#161d29] border-b border-[#232d3d] font-mono-tech uppercase text-[11px] text-[#98989a]">
+                <th class="py-3 px-4">Usuário</th>
+                <th class="py-3 px-4">Matrícula</th>
+                <th class="py-3 px-4">Perfil</th>
+                <th class="py-3 px-4">Abas Liberadas</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4">Último Acesso</th>
+                <th class="py-3 px-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-gestao-acessos" class="divide-y divide-[#232d3d]"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAIS: USUÁRIO / SENHA                                               -->
+  <!-- ===================================================================== -->
+  <div id="modal-usuario" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
+    <div class="w-full max-w-md bg-[#10151e] border border-[#232d3d] rounded-2xl shadow-2xl overflow-hidden">
+      <div class="bg-[#161d29] px-5 py-4 border-b border-[#232d3d] flex items-center justify-between">
+        <h3 id="modal-usuario-titulo" class="text-base font-extrabold text-white">Novo Usuário</h3>
+        <button type="button" data-fechar-modal="modal-usuario" class="w-8 h-8 rounded-lg bg-[#090c12] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
+      <form id="form-usuario" class="p-5 space-y-3.5" autocomplete="off">
+        <input type="hidden" id="usr-modo" value="criar" />
+        <div id="usr-erro" class="hidden bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs px-3 py-2 rounded-lg"></div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Nome completo *</label>
+          <input id="usr-nome" required maxlength="80" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Login *</label>
+            <input id="usr-login" required maxlength="30" autocapitalize="none" placeholder="ex: joao.silva" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 font-mono-tech focus:border-[#00379e] focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Matrícula</label>
+            <input id="usr-matricula" maxlength="20" placeholder="ex: 1328" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 font-mono-tech focus:border-[#00379e] focus:outline-none" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Perfil de acesso *</label>
+          <select id="usr-perfil" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none">
+            <option value="ENCARREGADO">Encarregado — QHA + Abertura de OS</option>
+            <option value="MECANICO">Mecânico — QHA + Minhas OS</option>
+            <option value="CONTROLADOR">Controlador (CCO) — QHA + Fila de Pendências</option>
+            <option value="ADMINISTRADOR">Administrador — Acesso total</option>
+          </select>
+          <p id="usr-abas-prev" class="text-[10px] text-[#98989a] mt-1.5"></p>
+        </div>
+        <div id="usr-bloco-senha">
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Senha inicial *</label>
+          <div class="flex gap-2">
+            <input id="usr-senha" type="text" autocomplete="new-password" class="flex-1 bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white font-mono-tech focus:border-[#00379e] focus:outline-none" />
+            <button type="button" id="btn-gerar-senha" class="px-3 rounded-lg bg-[#161d29] hover:bg-[#1f293a] border border-[#232d3d] text-neutral-200 text-[11px] font-bold cursor-pointer">Gerar</button>
+          </div>
+          <label class="flex items-center gap-2 mt-2 text-[11px] text-[#98989a] cursor-pointer">
+            <input type="checkbox" id="usr-trocar" checked class="accent-[#95d324]" /> Pedir para o usuário trocar a senha no primeiro acesso
+          </label>
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" data-fechar-modal="modal-usuario" class="px-4 py-2 rounded-lg bg-[#161d29] border border-[#232d3d] text-neutral-200 text-xs font-bold cursor-pointer">Cancelar</button>
+          <button type="submit" id="btn-salvar-usuario" class="px-4 py-2 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-xs font-bold cursor-pointer">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modal-senha" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-[#10151e] border border-[#232d3d] rounded-2xl shadow-2xl overflow-hidden">
+      <div class="bg-[#161d29] px-5 py-4 border-b border-[#232d3d] flex items-center justify-between">
+        <h3 id="modal-senha-titulo" class="text-base font-extrabold text-white">Alterar senha</h3>
+        <button type="button" data-fechar-modal="modal-senha" class="w-8 h-8 rounded-lg bg-[#090c12] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
+      <form id="form-senha" class="p-5 space-y-3.5" autocomplete="off">
+        <input type="hidden" id="sen-alvo" value="" />
+        <div id="sen-erro" class="hidden bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs px-3 py-2 rounded-lg"></div>
+        <div id="sen-bloco-atual">
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Senha atual *</label>
+          <input id="sen-atual" type="password" autocomplete="current-password" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#00379e] focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Nova senha *</label>
+          <div class="flex gap-2">
+            <input id="sen-nova" type="password" autocomplete="new-password" class="flex-1 bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white font-mono-tech focus:border-[#00379e] focus:outline-none" />
+            <button type="button" id="btn-sen-gerar" class="px-3 rounded-lg bg-[#161d29] hover:bg-[#1f293a] border border-[#232d3d] text-neutral-200 text-[11px] font-bold cursor-pointer">Gerar</button>
+          </div>
+          <label class="flex items-center gap-2 mt-2 text-[11px] text-[#98989a] cursor-pointer">
+            <input type="checkbox" id="sen-mostrar" class="accent-[#95d324]" /> Mostrar senha
+          </label>
+        </div>
+        <label id="sen-bloco-trocar" class="hidden flex items-center gap-2 text-[11px] text-[#98989a] cursor-pointer">
+          <input type="checkbox" id="sen-trocar" checked class="accent-[#95d324]" /> Pedir para trocar no próximo acesso
+        </label>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" data-fechar-modal="modal-senha" class="px-4 py-2 rounded-lg bg-[#161d29] border border-[#232d3d] text-neutral-200 text-xs font-bold cursor-pointer">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-xs font-bold cursor-pointer">Salvar senha</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
 
-@app.route("/api/usuarios/<login>", methods=["PUT"])
-@exigir_admin
-def api_editar_usuario(login):
-    login = login.strip().lower()
-    dados = request.get_json(silent=True) or {}
-    atual = _usuario_logado()
-    with _users_lock:
-        usuarios = _carregar_usuarios()
-        u = usuarios.get(login)
-        if not u:
-            return jsonify({"erro": "Usuário não encontrado."}), 404
+  <!-- ===================================================================== -->
+  <!-- MODAL: HISTÓRICO TÉCNICO DO EQUIPAMENTO                               -->
+  <!-- ===================================================================== -->
+  <div id="modal-historico" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl bg-[#10151e] border border-[#232d3d] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+      <div class="bg-[#161d29] px-5 py-4 border-b border-[#232d3d] flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <span id="modal-hist-frota" class="px-3 py-1 rounded-lg bg-[#00379e] text-white font-mono-tech font-extrabold text-sm">EH697</span>
+          <div>
+            <h3 id="modal-hist-titulo" class="text-sm sm:text-base font-extrabold text-white">Histórico Técnico do Equipamento</h3>
+            <p id="modal-hist-subtitulo" class="text-xs text-[#98989a]">Intervenções anteriores e serviços executados</p>
+          </div>
+        </div>
+        <button type="button" id="btn-fechar-modal-hist" class="w-8 h-8 rounded-lg bg-[#090c12] hover:bg-[#232d3d] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
 
-        if "nome" in dados:
-            nome = str(dados["nome"]).strip()
-            if len(nome) < 3:
-                return jsonify({"erro": "Informe o nome completo."}), 400
-            u["nome"] = nome[:80]
-        if "matricula" in dados:
-            u["matricula"] = str(dados["matricula"]).strip()[:20]
+      <div id="modal-hist-corpo" class="p-5 overflow-y-auto space-y-3.5 flex-1"></div>
 
-        novo_perfil = str(dados.get("perfil", u["perfil"])).strip().upper()
-        novo_ativo = bool(dados.get("ativo", u.get("ativo", True)))
-        if novo_perfil not in PERFIS:
-            return jsonify({"erro": "Perfil inválido."}), 400
+      <div class="bg-[#161d29] px-5 py-3 border-t border-[#232d3d] flex justify-between items-center">
+        <span class="text-[11px] font-mono-tech text-[#98989a]">Base Histórica • manuntecao.xlsm</span>
+        <button type="button" id="btn-rodape-fechar-hist" class="px-4 py-2 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-xs font-bold cursor-pointer">
+          Fechar Histórico
+        </button>
+      </div>
+    </div>
+  </div>
 
-        era_admin_ativo = u["perfil"] == "ADMINISTRADOR" and u.get("ativo", True)
-        segue_admin_ativo = novo_perfil == "ADMINISTRADOR" and novo_ativo
-        if era_admin_ativo and not segue_admin_ativo and _qtd_admins_ativos(usuarios, ignorar=login) == 0:
-            return jsonify({"erro": "Precisa existir pelo menos um administrador ativo."}), 400
-        if login == atual["login"] and not novo_ativo:
-            return jsonify({"erro": "Você não pode bloquear o seu próprio acesso."}), 400
+  <!-- ===================================================================== -->
+  <!-- MODAL: FINALIZAR OS PELO MECÂNICO                                     -->
+  <!-- ===================================================================== -->
+  <div id="modal-finalizar-os" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-[#10151e] border border-[#232d3d] rounded-2xl shadow-2xl overflow-hidden">
+      <div class="bg-[#161d29] px-5 py-4 border-b border-[#232d3d] flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-[#95d324]">Conclusão Técnica • Grava Log de Retirada no Drive</span>
+          <h3 class="text-base font-extrabold text-white">Finalizar OS • <span id="fin-os-titulo" class="font-mono-tech text-[#95d324]"></span></h3>
+        </div>
+        <button type="button" id="btn-fechar-modal-fin" class="w-8 h-8 rounded-lg bg-[#090c12] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
 
-        u["perfil"] = novo_perfil
-        u["ativo"] = novo_ativo
-        _persistir_usuarios(usuarios)
-        return jsonify({"usuario": _usuario_publico(u)})
+      <form id="form-finalizar-os" class="p-5 space-y-4">
+        <input type="hidden" id="fin-os-id" />
 
+        <div class="bg-[#090c12] border border-[#232d3d] rounded-xl p-3 text-xs text-[#98989a]">
+          Ao finalizar esta OS, o serviço será gravado no <strong class="text-white">Histórico Técnico</strong>, enviado como log + foto na aba <strong>Retirada</strong> (<code class="text-[#95d324]">log_retirada_equipamentos.xlsx</code>) e uma <strong class="text-amber-300">Pendência de Baixa</strong> será enviada ao Controlador CCO.
+        </div>
 
-@app.route("/api/usuarios/<login>/senha", methods=["POST"])
-@exigir_admin
-def api_redefinir_senha(login):
-    login = login.strip().lower()
-    dados = request.get_json(silent=True) or {}
-    nova = str(dados.get("novaSenha", ""))
-    erro = _validar_senha(nova)
-    if erro:
-        return jsonify({"erro": erro}), 400
-    with _users_lock:
-        usuarios = _carregar_usuarios()
-        u = usuarios.get(login)
-        if not u:
-            return jsonify({"erro": "Usuário não encontrado."}), 404
-        u["senha_hash"] = generate_password_hash(nova)
-        u["trocar_senha"] = bool(dados.get("trocarSenha", True))
-        _persistir_usuarios(usuarios)
-        return jsonify({"usuario": _usuario_publico(u)})
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Serviço Executado *</label>
+          <textarea id="fin-os-servico" rows="3" required placeholder="Descreva o reparo realizado e testes efetuados..." class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#95d324] focus:outline-none"></textarea>
+        </div>
 
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Peças Substituídas *</label>
+            <input type="text" id="fin-os-pecas" required placeholder="Ex: Mangueira 1 pol., Kit vedações" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white focus:border-[#95d324] focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">Horímetro Atual (h) *</label>
+            <input type="number" id="fin-os-horimetro" required placeholder="Ex: 14850" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs font-mono-tech text-white focus:border-[#95d324] focus:outline-none" />
+          </div>
+        </div>
 
-@app.route("/api/usuarios/<login>", methods=["DELETE"])
-@exigir_admin
-def api_excluir_usuario(login):
-    login = login.strip().lower()
-    atual = _usuario_logado()
-    with _users_lock:
-        usuarios = _carregar_usuarios()
-        u = usuarios.get(login)
-        if not u:
-            return jsonify({"erro": "Usuário não encontrado."}), 404
-        if login == atual["login"]:
-            return jsonify({"erro": "Você não pode excluir o seu próprio acesso."}), 400
-        if u["perfil"] == "ADMINISTRADOR" and u.get("ativo", True) and _qtd_admins_ativos(usuarios, ignorar=login) == 0:
-            return jsonify({"erro": "Precisa existir pelo menos um administrador ativo."}), 400
-        del usuarios[login]
-        _persistir_usuarios(usuarios)
-        return jsonify({"ok": True})
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-[#98989a] mb-1">📷 Foto da Liberação / Serviço Concluído (Opcional)</label>
+          <input type="file" id="fin-os-foto" accept="image/*" capture="environment" class="w-full bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-1.5 text-xs text-neutral-300" />
+        </div>
 
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="btn-cancelar-modal-fin" class="px-4 py-2 rounded-lg bg-[#161d29] text-neutral-300 text-xs font-semibold cursor-pointer">
+            Cancelar
+          </button>
+          <button type="submit" id="btn-submit-fin-os" class="px-5 py-2 rounded-lg bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] text-xs font-extrabold cursor-pointer">
+            ✓ Finalizar &amp; Salvar no Drive
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-@app.route("/")
-def index():
-    return send_from_directory(".", "index.html")
+  <!-- ===================================================================== -->
+  <!-- MODAL: VISUALIZAR FOTO DA FALHA                                       -->
+  <!-- ===================================================================== -->
+  <div id="modal-foto" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-[#10151e] border border-[#232d3d] rounded-2xl overflow-hidden shadow-2xl">
+      <div class="bg-[#161d29] px-5 py-3.5 border-b border-[#232d3d] flex items-center justify-between">
+        <h3 id="modal-foto-titulo" class="text-sm font-bold text-white">Evidência Fotográfica da OS</h3>
+        <button type="button" id="btn-fechar-modal-foto" class="w-8 h-8 rounded-lg bg-[#090c12] text-neutral-300 font-bold cursor-pointer">✕</button>
+      </div>
+      <div class="p-4 bg-[#090c12] flex items-center justify-center">
+        <img id="modal-foto-img" src="" alt="Foto da OS" class="max-h-[65vh] w-auto rounded-xl border border-[#232d3d]" />
+      </div>
+    </div>
+  </div>
 
+  <!-- BOTÃO FLUTUANTE PARA SAIR DO MODO TV -->
+  <button
+    type="button"
+    id="btn-sair-modo-tv"
+    class="hidden items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3.5 py-2 rounded-lg cursor-pointer shadow-lg"
+  >
+    <span>✕</span>
+    <span>Sair do Modo TV (ESC)</span>
+  </button>
 
-@app.route("/api/em-manutencao", methods=["GET"])
-@exigir_login
-def listar_em_manutencao():
-    forcar = request.args.get("refresh") == "1"
-    try:
-        dados, _ = _obter_dados_planilha(forcar=forcar)
-        return jsonify(dados)
-    except Exception as e:
-        return jsonify({"erro": str(e), "total": 0, "equipamentos": []}), 500
+  <!-- TOAST DE NOTIFICAÇÃO CORPORATIVA -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
 
+  <!-- ===================================================================== -->
+  <!-- JAVASCRIPT: REGRAS DE NEGÓCIO, VARREDURA 10 MIN & INTEGRAÇÃO DRIVE    -->
+  <!-- ===================================================================== -->
+  <script>
+    (function () {
+      'use strict';
 
-@app.route("/api/historico/<frota>", methods=["GET"])
-@exigir_login
-def obter_historico(frota):
-    frota_limpa = frota.strip().upper()
-    try:
-        _, historico = _obter_dados_planilha(forcar=False)
-        registros = historico.get(frota_limpa, [])
-        return jsonify({
-            "frota": frota_limpa,
-            "total": len(registros),
-            "registros": registros[:50]
-        })
-    except Exception as e:
-        return jsonify({"erro": str(e), "frota": frota_limpa, "registros": []}), 500
+      const ABAS_ROTULO = {
+        quadro: 'Quadro de Manutenções (QHA)',
+        os: 'Ordens de Serviço (OS)',
+        'minhas-os': 'Minhas OS (Lista)',
+        pendencias: 'Fila de Pendências (CCO)',
+        acessos: 'Gestão de Acessos'
+      };
+      const PERFIL_ROTULO = {
+        ADMINISTRADOR: 'Administrador',
+        ENCARREGADO: 'Encarregado',
+        MECANICO: 'Mecânico',
+        CONTROLADOR: 'Controlador (CCO)'
+      };
+      const PERFIL_SIGLA = { ADMINISTRADOR: 'ADM', ENCARREGADO: 'ENC', MECANICO: 'MEC', CONTROLADOR: 'CCO' };
+      const PERFIL_ABAS = {
+        ENCARREGADO: ['quadro', 'os'],
+        MECANICO: ['quadro', 'minhas-os'],
+        CONTROLADOR: ['quadro', 'pendencias'],
+        ADMINISTRADOR: ['quadro', 'os', 'minhas-os', 'pendencias', 'acessos']
+      };
 
+      function esc(v) {
+        return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
 
-@app.route("/api/log/entrada", methods=["POST"])
-@exigir_login
-def log_entrada():
-    dados = dict(request.json or {})
-    dados["tipo"] = "entrada"
-    if not APPS_SCRIPT_URL:
-        return jsonify({"ok": True, "status": "simulado", "mensagem": "Log aceito localmente."}), 200
-    try:
-        res = requests.post(APPS_SCRIPT_URL, json=dados, timeout=25)
-        return jsonify({"ok": True, **res.json()})
-    except Exception as e:
-        return jsonify({"ok": False, "erro": str(e)}), 502
+      function fmtMat(m) {
+        const t = String(m || '').trim();
+        if (!t) return '—';
+        return /^mat/i.test(t) ? t : `Mat. ${t}`;
+      }
 
+      function montarUsuarioUI(u) {
+        return {
+          ...u,
+          sigla: PERFIL_SIGLA[u.perfil] || 'OP',
+          matricula: fmtMat(u.matricula),
+          abas: u.abas.map((id, i) => ({ id, label: `${i + 1}. ${ABAS_ROTULO[id] || id}` }))
+        };
+      }
 
-@app.route("/api/log/retirada", methods=["POST"])
-@exigir_login
-def log_retirada():
-    dados = dict(request.json or {})
-    dados["tipo"] = "retirada"
-    if not APPS_SCRIPT_URL:
-        return jsonify({"ok": True, "status": "simulado", "mensagem": "Log aceito localmente."}), 200
-    try:
-        res = requests.post(APPS_SCRIPT_URL, json=dados, timeout=25)
-        return jsonify({"ok": True, **res.json()})
-    except Exception as e:
-        return jsonify({"ok": False, "erro": str(e)}), 502
+      async function api(url, opts = {}) {
+        const res = await fetch(url, {
+          credentials: 'same-origin',
+          ...opts,
+          headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+          body: opts.body ? JSON.stringify(opts.body) : undefined
+        });
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
+        if (res.status === 401 && estado.usuarioAtual) {
+          sairDoSistema();
+          mostrarToast('Sessão expirada', 'Entre novamente para continuar.', 'warning');
+        }
+        if (!res.ok) throw new Error(data.erro || `Erro ${res.status}`);
+        return data;
+      }
 
+      let listaUsuarios = [];
+      let listaMecanicos = [];
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+      const CATALOGO_FROTAS = [
+        { frota: 'C1964', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 21450 },
+        { frota: 'C1983', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 24110 },
+        { frota: 'C2201', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 16200 },
+        { frota: 'C2205', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 15890 },
+        { frota: 'C2207', categoria: 'EQUIPAMENTO MINA', local: 'LIB0750 272 SW', horimetro: 15430 },
+        { frota: 'C2212', categoria: 'EQUIPAMENTO DRYSTACK', local: 'FILTRO PRENSA', horimetro: 14980 },
+        { frota: 'C2330', categoria: 'EQUIPAMENTO ALIMENTACAO', local: 'BRITAGEM', horimetro: 12300 },
+        { frota: 'CR54', categoria: 'EQUIPAMENTO INFRA', local: 'PCH47', horimetro: 18750 },
+        { frota: 'EH003', categoria: 'EQUIPAMENTO AUXILIAR', local: 'PÁTIO APOIO', horimetro: 11200 },
+        { frota: 'EH697', categoria: 'EQUIPAMENTO MINA', local: 'OFICINA FAGUNDES', horimetro: 14820 },
+        { frota: 'EH711', categoria: 'EQUIPAMENTO MINA', local: 'CAVA SUL', horimetro: 13940 },
+        { frota: 'EH720', categoria: 'EQUIPAMENTO DRYSTACK', local: 'FILTRO PRENSA', horimetro: 9410 },
+        { frota: 'EH726', categoria: 'EQUIPAMENTO MINA', local: 'FRENTE LESTE', horimetro: 8795 }
+      ];
+
+      let planilhaXlsmRows = [];
+      let ordensServico = [];
+      let filaPendencias = [];
+      let historicoTecnicoDB = {};
+
+      let estado = {
+        usuarioAtual: null,
+        abaAtiva: 'quadro',
+        linhaQhaSelecionada: null,
+        fotoAnexadaDataUrl: null,
+        segundosRestantesVarredura: 600
+      };
+
+      // =====================================================================
+      // AJUSTE AUTOMÁTICO DA TABELA NO MODO TV FIXO (SEM ROLAGEM)
+      // =====================================================================
+      function ajustarEscalaTabelaTv() {
+        if (!document.body.classList.contains('modo-tv-ativo')) return;
+        const tabela = document.querySelector('#aba-quadro .tabela-qha-industrial');
+        const thead = tabela?.querySelector('thead');
+        const linhas = tabela?.querySelectorAll('tbody tr');
+        if (!tabela || !thead || !linhas || linhas.length === 0) return;
+
+        const alturaTela = window.innerHeight;
+        const alturaCabecalho = thead.offsetHeight || 32;
+        const alturaDisponivel = alturaTela - alturaCabecalho;
+        const alturaPorLinha = Math.floor(alturaDisponivel / linhas.length);
+        const fonteCalculada = Math.max(10, Math.min(20, Math.floor(alturaPorLinha * 0.62)));
+
+        linhas.forEach((tr) => {
+          tr.style.height = `${alturaPorLinha}px`;
+          tr.style.fontSize = `${fonteCalculada}px`;
+        });
+      }
+
+      // =====================================================================
+      // INTEGRAÇÃO COM BACKEND FLASK + GOOGLE DRIVE (manuntecao.xlsm & Logs)
+      // =====================================================================
+      async function sincronizarComPlanilhaRealDrive(notificar = false) {
+        try {
+          const res = await fetch('/api/em-manutencao');
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && Array.isArray(data.equipamentos) && data.equipamentos.length > 0) {
+            planilhaXlsmRows = data.equipamentos.map((eq, idx) => {
+              const catInfo = CATALOGO_FROTAS.find((f) => f.frota === eq.equipamento) || {
+                categoria: 'EQUIPAMENTO MINA',
+                local: eq.local || 'OFICINA FAGUNDES',
+                horimetro: 15000
+              };
+              return {
+                rowId: `DRIVE-${idx + 1}`,
+                frota: eq.equipamento,
+                categoria: catInfo.categoria,
+                inicio: eq.inicio,
+                fim: '',
+                duracaoMin: eq.duracaoMin !== undefined ? eq.duracaoMin : 120.0,
+                especialidade: eq.especialidade || 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
+                matricula: eq.matricula && eq.matricula !== '-' ? eq.matricula : '',
+                executante: eq.mecanico || '-',
+                horimetro: eq.horimetro && eq.horimetro !== '-' ? eq.horimetro : (catInfo.horimetro || '-'),
+                tipo: eq.tipo || 'Corretiva',
+                local: eq.local || catInfo.local,
+                comentario: eq.motivo || 'EM MANUTENÇÃO'
+              };
+            });
+            renderizarTudo();
+            popularSelectsFrota();
+            if (notificar) {
+              mostrarToast('Planilha Sincronizada', `${data.equipamentos.length} ativo(s) carregado(s) de manuntecao.xlsm.`, 'success');
+            }
+            executarVarreduraPlanilha(false);
+          } else if (notificar) {
+            mostrarToast('Sincronização Drive', 'Planilha verificada (nenhuma linha ativa retornada no momento).', 'info');
+          }
+        } catch (err) {
+          if (notificar) {
+            mostrarToast('Modo Local Ativo', 'Operando com base local enquanto o servidor não responde.', 'warning');
+          }
+        }
+      }
+
+      async function gravarLogNoGoogleDrive(tipo, payload) {
+        try {
+          const endpoint = tipo === 'entrada' ? '/api/log/entrada' : '/api/log/retirada';
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            mostrarToast('Google Drive Atualizado', `Log de ${tipo.toUpperCase()} e arquivo .xlsx salvos na pasta Logs_Manutencao.`, 'success');
+          }
+        } catch (err) {
+          console.warn('Falha ao gravar no backend:', err);
+        }
+      }
+
+      function lerArquivoBase64(file) {
+        return new Promise((resolve) => {
+          if (!file) return resolve('');
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function gerarSvgEvidencia(frota, tipo, texto) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+          <rect width="640" height="360" fill="#10151e"/>
+          <rect x="20" y="20" width="600" height="320" rx="14" fill="#161d29" stroke="#00379e" stroke-width="3"/>
+          <rect x="40" y="42" width="130" height="36" rx="8" fill="#00379e"/>
+          <text x="105" y="66" fill="#ffffff" font-family="monospace" font-weight="bold" font-size="18" text-anchor="middle">${frota}</text>
+          <text x="190" y="66" fill="#95d324" font-family="sans-serif" font-weight="bold" font-size="15">EVIDÊNCIA DE CAMPO • ${tipo.toUpperCase()}</text>
+          <line x1="40" y1="95" x2="600" y2="95" stroke="#232d3d" stroke-width="2"/>
+          <text x="40" y="145" fill="#f3f4f6" font-family="sans-serif" font-weight="bold" font-size="18">${texto.slice(0, 46)}</text>
+          <text x="40" y="185" fill="#98989a" font-family="monospace" font-size="14">REGISTRO FOTOGRÁFICO • FAGUNDES CONSTRUÇÃO E MINERAÇÃO</text>
+          <rect x="40" y="230" width="560" height="80" rx="10" fill="#090c12" stroke="#232d3d"/>
+          <text x="60" y="265" fill="#95d324" font-family="monospace" font-size="13">STATUS: ANEXADO À ORDEM DE SERVIÇO</text>
+          <text x="60" y="290" fill="#98989a" font-family="monospace" font-size="12">SINCRONIZAÇÃO: manuntecao.xlsm</text>
+        </svg>`;
+        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      }
+
+      async function acionarSireneIndustrial(isTeste = false) {
+        try {
+          if (typeof Tone !== 'undefined') {
+            await Tone.start();
+            const osc = new Tone.Oscillator({ type: 'sawtooth', frequency: 540 }).toDestination();
+            const lfo = new Tone.LFO({ frequency: 2.8, min: 450, max: 820 }).start();
+            lfo.connect(osc.frequency);
+            osc.volume.value = -14;
+            osc.start();
+            setTimeout(() => {
+              osc.stop();
+              lfo.stop();
+              osc.dispose();
+              lfo.dispose();
+            }, 1400);
+          }
+          if (isTeste) {
+            mostrarToast('Sirene Industrial LFO', 'Alerta sonoro testado com sucesso.', 'info');
+          }
+        } catch (e) {
+          console.warn('Áudio aguardando interação:', e);
+        }
+      }
+
+      function mostrarToast(titulo, mensagem, tipo = 'success') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        const borda = tipo === 'success' ? 'border-l-[#95d324]' : tipo === 'warning' ? 'border-l-amber-400' : 'border-l-[#00379e]';
+        const el = document.createElement('div');
+        el.className = `pointer-events-auto bg-[#161d29] border border-[#232d3d] border-l-4 ${borda} rounded-xl p-3.5 shadow-2xl transition-all duration-300`;
+        el.innerHTML = `
+          <div class="text-xs font-bold text-white">${titulo}</div>
+          <div class="text-[11px] text-[#98989a] mt-0.5 leading-snug">${mensagem}</div>
+        `;
+        container.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity = '0';
+          setTimeout(() => el.remove(), 300);
+        }, 4500);
+      }
+
+      function agoraFormatado() {
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+
+      function horaAtualSegundos() {
+        return new Date().toLocaleTimeString('pt-BR');
+      }
+
+      function parsePtBrDataTs(str) {
+        if (!str) return 0;
+        const m = str.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+        if (!m) return 0;
+        return new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5]).getTime();
+      }
+
+      function executarVarreduraPlanilha(origemManual = false) {
+        let removidasEntrada = [];
+        let removidasBaixa = [];
+
+        filaPendencias = filaPendencias.filter((pend) => {
+          const linhasFrota = planilhaXlsmRows.filter((r) => r.frota === pend.frota);
+
+          if (pend.tipoPendencia === 'ENTRADA') {
+            const tsOs = pend.criadoEmTs || 0;
+            const novaEntrada = linhasFrota.some((r) => {
+              if (r.inicio.trim() === '' || r.fim.trim() !== '') return false;
+              const tsInicio = parsePtBrDataTs(r.inicio);
+              return tsInicio >= tsOs;
+            });
+            if (novaEntrada) {
+              removidasEntrada.push(pend.frota);
+              return false;
+            }
+            return true;
+          }
+
+          if (pend.tipoPendencia === 'BAIXA') {
+            const tsOs = pend.criadoEmTs || 0;
+            const aindaTemLinhaSemFim = linhasFrota.some((r) => r.inicio.trim() !== '' && r.fim.trim() === '');
+            const temFimNovo = linhasFrota.some((r) => {
+              if (r.fim.trim() === '') return false;
+              const tsFim = parsePtBrDataTs(r.fim);
+              return tsFim >= tsOs;
+            });
+
+            if (!aindaTemLinhaSemFim && temFimNovo) {
+              removidasBaixa.push(pend.frota);
+              return false;
+            }
+            return true;
+          }
+
+          return true;
+        });
+
+        const kpiSync = document.getElementById('kpi-ultima-atualizacao');
+        if (kpiSync) kpiSync.textContent = horaAtualSegundos();
+        estado.segundosRestantesVarredura = 600;
+        atualizarDisplayTimer10m();
+
+        renderizarTudo();
+
+        if (removidasBaixa.length > 0) {
+          const frotasTxt = removidasBaixa.join(', ');
+          const banner = document.getElementById('banner-alerta-saida');
+          const titulo = document.getElementById('banner-alerta-titulo');
+          const detalhe = document.getElementById('banner-alerta-detalhe');
+          if (banner && titulo && detalhe) {
+            titulo.textContent = `FROTA(S) LIBERADA(S) DO QHA: ${frotasTxt}`;
+            detalhe.textContent = `Horário "Fim" confirmado em manuntecao.xlsm às ${horaAtualSegundos()}. Pendência excluída automaticamente da fila.`;
+            banner.classList.remove('hidden');
+          }
+          acionarSireneIndustrial(false);
+          mostrarToast('Baixa Automática Confirmada', `Frota(s) ${frotasTxt} com horário "Fim" preenchido na planilha: removida(s) do QHA e da fila.`, 'success');
+        } else if (removidasEntrada.length > 0) {
+          mostrarToast('Entrada Sincronizada', `Frota(s) ${removidasEntrada.join(', ')} identificada(s) com "Início" na planilha e excluída(s) da fila.`, 'info');
+        } else if (origemManual) {
+          mostrarToast('Varredura Concluída', 'Planilha manuntecao.xlsm verificada. Nenhuma nova baixa com horário "Fim" pendente.', 'info');
+        }
+      }
+
+      function atualizarDisplayTimer10m() {
+        const min = Math.floor(estado.segundosRestantesVarredura / 60);
+        const seg = estado.segundosRestantesVarredura % 60;
+        const formatado = `${String(min).padStart(2, '0')}:${String(seg).padStart(2, '0')}`;
+        const elHeader = document.getElementById('header-timer-10m');
+        const elCco = document.getElementById('cco-countdown-display');
+        if (elHeader) elHeader.textContent = formatado;
+        if (elCco) elCco.textContent = formatado;
+      }
+
+      function renderizarQuadroQHA() {
+        const tbody = document.getElementById('tbody-qha-industrial');
+        if (!tbody) return;
+
+        const ativosNaPlanilha = planilhaXlsmRows.filter(
+          (row) => row.inicio.trim() !== '' && row.fim.trim() === ''
+        );
+
+        const kpiTotal = document.getElementById('kpi-total-manutencao');
+        if (kpiTotal) kpiTotal.textContent = ativosNaPlanilha.length;
+
+        const busca = (document.getElementById('qha-busca-texto')?.value || '').trim().toUpperCase();
+
+        const filtrados = ativosNaPlanilha.filter((row) => {
+          return !busca ||
+            row.frota.toUpperCase().includes(busca) ||
+            row.especialidade.toUpperCase().includes(busca) ||
+            row.comentario.toUpperCase().includes(busca);
+        });
+
+        const contadorEl = document.getElementById('qha-contador-filtrado');
+        if (contadorEl) contadorEl.textContent = `${filtrados.length} equipamento${filtrados.length === 1 ? '' : 's'}`;
+
+        if (filtrados.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="6" style="text-align:center; padding: 24px; color: #4b5563; font-weight: 600;">
+                Nenhum equipamento ativo em manutenção (sem horário "Fim") para o filtro selecionado.
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = filtrados.map((row) => {
+          const isSelected = estado.linhaQhaSelecionada === row.frota;
+          const durMin = Number(row.duracaoMin).toFixed(2);
+          const durHoras = (Number(row.duracaoMin) / 60).toFixed(2);
+
+          return `
+            <tr data-qha-frota="${row.frota}" class="${isSelected ? 'linha-selecionada' : ''}" title="Clique para abrir o Histórico Técnico de ${row.frota}">
+              <td class="font-bold font-mono-tech">${row.frota}</td>
+              <td class="celula-vermelha-qha">MANUTENÇÃO</td>
+              <td class="celula-vermelha-qha">${row.especialidade}</td>
+              <td class="font-mono-tech">${durMin}</td>
+              <td class="font-mono-tech">${durHoras}</td>
+              <td class="uppercase">${row.comentario}</td>
+            </tr>
+          `;
+        }).join('');
+
+        ajustarEscalaTabelaTv();
+      }
+
+      function renderizarListaMecanico() {
+        const tbody = document.getElementById('tbody-lista-mecanico');
+        const contador = document.getElementById('contador-minhas-os');
+        const badgeMec = document.getElementById('badge-mecanico-ativo');
+        if (!tbody) return;
+
+        const user = estado.usuarioAtual;
+        if (badgeMec && user) {
+          badgeMec.textContent = `${user.nome} (${user.matricula})`;
+        }
+
+        const minhas = ordensServico.filter((os) => {
+          if (os.status === 'CONCLUIDA') return false;
+          if (user && user.perfil === 'ADMINISTRADOR') return true;
+          return !!user && os.mecanico.includes(user.nome);
+        });
+
+        if (contador) contador.textContent = `${minhas.length} Ativa${minhas.length === 1 ? '' : 's'}`;
+
+        if (minhas.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="7" class="py-8 px-4 text-center text-[#98989a]">
+                Nenhuma Ordem de Serviço ativa na sua lista no momento.
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = minhas.map((os) => {
+          const histCount = (historicoTecnicoDB[os.frota] || []).length;
+          const isEmExecucao = os.status === 'EM_EXECUCAO';
+          const tipoClass = os.tipo === 'Corretiva'
+            ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+            : 'bg-[#95d324]/15 text-[#95d324] border-[#95d324]/30';
+          const statusBadge = isEmExecucao
+            ? '<span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono-tech text-[10px] font-bold">EM EXECUÇÃO</span>'
+            : '<span class="px-2 py-0.5 rounded-full bg-[#00379e]/40 text-blue-200 border border-[#00379e] font-mono-tech text-[10px] font-bold">DESTINADA</span>';
+
+          return `
+            <tr class="hover:bg-[#161d29] transition">
+              <td class="py-3 px-3.5 font-mono-tech font-bold text-[#95d324] whitespace-nowrap">${os.id}</td>
+              <td class="py-3 px-3.5 whitespace-nowrap">
+                <span class="px-2.5 py-1 rounded bg-[#00379e] text-white font-mono-tech font-extrabold text-xs">${os.frota}</span>
+              </td>
+              <td class="py-3 px-3.5 whitespace-nowrap">
+                <span class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${tipoClass}">${os.tipo}</span>
+              </td>
+              <td class="py-3 px-3.5 text-neutral-300 font-medium whitespace-nowrap">${os.especialidade.replace(/^MANUTEN[CÇ][AÃ]O\s+\d+\s+/i, '')}</td>
+              <td class="py-3 px-3.5 text-white font-medium max-w-xs truncate" title="${os.descricao}">${os.descricao}</td>
+              <td class="py-3 px-3.5 whitespace-nowrap">${statusBadge}</td>
+              <td class="py-3 px-3.5 text-right whitespace-nowrap">
+                <div class="inline-flex items-center justify-end gap-1.5">
+                  <button
+                    type="button"
+                    data-acao="abrir-historico"
+                    data-frota="${os.frota}"
+                    class="px-2.5 py-1.5 rounded-lg bg-[#161d29] hover:bg-[#1f293a] border border-[#00379e] text-blue-200 hover:text-white text-[11px] font-bold transition cursor-pointer"
+                    title="Consultar Histórico Técnico de ${os.frota}"
+                  >
+                    📋 Histórico (${histCount})
+                  </button>
+
+                  ${os.foto ? `
+                    <button
+                      type="button"
+                      data-acao="ver-foto"
+                      data-os-id="${os.id}"
+                      class="px-2.5 py-1.5 rounded-lg bg-[#161d29] hover:bg-[#232d3d] border border-[#232d3d] text-neutral-200 text-[11px] font-semibold transition cursor-pointer"
+                    >
+                      📷 Foto
+                    </button>
+                  ` : ''}
+
+                  ${!isEmExecucao ? `
+                    <button
+                      type="button"
+                      data-acao="iniciar-os"
+                      data-os-id="${os.id}"
+                      class="px-3 py-1.5 rounded-lg bg-[#00379e] hover:bg-[#0047cc] text-white text-[11px] font-bold transition cursor-pointer"
+                    >
+                      ▶ Iniciar
+                    </button>
+                  ` : `
+                    <button
+                      type="button"
+                      data-acao="abrir-finalizar"
+                      data-os-id="${os.id}"
+                      class="px-3 py-1.5 rounded-lg bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] text-[11px] font-extrabold transition cursor-pointer"
+                    >
+                      ✓ Finalizar
+                    </button>
+                  `}
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      function renderizarOsEncarregado() {
+        const container = document.getElementById('lista-os-encarregado');
+        const contador = document.getElementById('contador-os-geral');
+        if (!container) return;
+
+        if (contador) contador.textContent = `${ordensServico.length} OS`;
+
+        container.innerHTML = ordensServico.map((os) => {
+          const histCount = (historicoTecnicoDB[os.frota] || []).length;
+          const statusMap = {
+            DESTINADA: '<span class="px-2 py-0.5 rounded bg-[#00379e]/40 text-blue-200 border border-[#00379e] font-mono-tech text-[10px] font-bold">DESTINADA</span>',
+            EM_EXECUCAO: '<span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono-tech text-[10px] font-bold">EM EXECUÇÃO</span>',
+            CONCLUIDA: '<span class="px-2 py-0.5 rounded bg-[#95d324]/20 text-[#95d324] border border-[#95d324]/40 font-mono-tech text-[10px] font-bold">CONCLUÍDA (AGUARDANDO FIM XLSM)</span>'
+          };
+
+          return `
+            <div class="bg-[#161d29] border border-[#232d3d] rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="space-y-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="px-2 py-0.5 rounded bg-[#00379e] text-white font-mono-tech font-bold text-xs">${os.frota}</span>
+                  <span class="font-mono-tech text-xs text-[#98989a]">${os.id}</span>
+                  <span class="text-[11px] font-bold ${os.tipo === 'Corretiva' ? 'text-rose-400' : 'text-[#95d324]'}">${os.tipo}</span>
+                  ${statusMap[os.status] || ''}
+                </div>
+                <div class="text-xs font-bold text-white truncate">${os.descricao}</div>
+                <div class="text-[11px] text-[#98989a] font-mono-tech">
+                  Mecânico: <span class="text-neutral-200">${os.mecanico}</span> • Abertura: ${os.abertura}
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-acao="abrir-historico"
+                  data-frota="${os.frota}"
+                  class="px-3 py-1.5 rounded-lg bg-[#10151e] hover:bg-[#00379e] border border-[#232d3d] text-xs font-bold text-blue-200 hover:text-white transition cursor-pointer"
+                >
+                  📋 Histórico (${histCount})
+                </button>
+                ${os.foto ? `
+                  <button
+                    type="button"
+                    data-acao="ver-foto"
+                    data-os-id="${os.id}"
+                    class="px-2.5 py-1.5 rounded-lg bg-[#10151e] hover:bg-[#232d3d] border border-[#232d3d] text-xs text-neutral-200 cursor-pointer"
+                  >
+                    📷
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      function renderizarFilaPendenciasESimulador() {
+        const listaPend = document.getElementById('lista-pendencias-cco');
+        const badgePend = document.getElementById('cco-pendencias-badge');
+        const tbodyXlsm = document.getElementById('tbody-simulador-xlsm');
+
+        if (badgePend) {
+          badgePend.textContent = `${filaPendencias.length} pendente${filaPendencias.length === 1 ? '' : 's'}`;
+        }
+
+        if (listaPend) {
+          if (filaPendencias.length === 0) {
+            listaPend.innerHTML = `
+              <div class="p-8 text-center">
+                <div class="text-sm font-bold text-[#95d324]">✓ Fila de Pendências Zerada</div>
+                <p class="text-xs text-[#98989a] mt-1">Todas as solicitações de entrada e baixa já estão sincronizadas com as colunas Início e Fim de manuntecao.xlsm.</p>
+              </div>
+            `;
+          } else {
+            listaPend.innerHTML = filaPendencias.map((p) => {
+              const isEntrada = p.tipoPendencia === 'ENTRADA';
+              const badgeTipo = isEntrada
+                ? '<span class="px-2.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 font-mono-tech text-[10px] font-bold">AGUARDANDO "INÍCIO" NA PLANILHA</span>'
+                : '<span class="px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono-tech text-[10px] font-bold">TRAVADO NO QHA • AGUARDANDO HORÁRIO "FIM"</span>';
+
+              return `
+                <div class="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-[#161d29]/60 transition">
+                  <div class="space-y-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="px-2.5 py-0.5 rounded bg-[#00379e] text-white font-mono-tech font-extrabold text-xs">${p.frota}</span>
+                      <span class="font-mono-tech text-xs text-[#98989a]">${p.osId}</span>
+                      ${badgeTipo}
+                    </div>
+                    <p class="text-xs font-semibold text-white">${p.motivo}</p>
+                    <div class="text-[11px] text-[#98989a] font-mono-tech">
+                      Origem: ${p.solicitante} • Registrado em: ${p.criadoEm}
+                    </div>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#090c12] border border-[#232d3d] text-[11px] font-mono-tech text-[#98989a]">
+                      <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                      Exclusão automática na varredura
+                    </span>
+                  </div>
+                </div>
+              `;
+            }).join('');
+          }
+        }
+
+        if (tbodyXlsm) {
+          tbodyXlsm.innerHTML = planilhaXlsmRows.map((row) => {
+            const semFim = row.fim.trim() === '';
+            return `
+              <tr class="hover:bg-[#161d29] transition">
+                <td class="py-2.5 px-3 font-mono-tech font-bold text-white">${row.frota}</td>
+                <td class="py-2.5 px-3 text-[11px] text-[#98989a]">${row.categoria.replace('EQUIPAMENTO ', '')}</td>
+                <td class="py-2.5 px-3 font-mono-tech text-[#95d324] whitespace-nowrap">${row.inicio}</td>
+                <td class="py-2.5 px-3 font-mono-tech whitespace-nowrap ${semFim ? 'text-amber-300 font-bold' : 'text-neutral-300'}">
+                  ${semFim ? 'VAZIO (ATIVO NO QHA)' : row.fim}
+                </td>
+                <td class="py-2.5 px-3 text-[11px] text-neutral-300 max-w-[200px] truncate">${row.especialidade}</td>
+                <td class="py-2.5 px-3 text-[11px] text-neutral-300 whitespace-nowrap">${row.executante}${row.matricula ? ` (${row.matricula})` : ''}</td>
+                <td class="py-2.5 px-3 font-mono-tech text-neutral-300">${row.horimetro !== '-' ? row.horimetro + 'h' : '-'}</td>
+                <td class="py-2.5 px-3 text-[11px]">${row.tipo}</td>
+                <td class="py-2.5 px-3 text-[11px] text-white uppercase max-w-[180px] truncate">${row.comentario}</td>
+                <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                  ${semFim ? `
+                    <button
+                      type="button"
+                      data-acao="preencher-fim-xlsm"
+                      data-row-id="${row.rowId}"
+                      class="px-2.5 py-1 rounded bg-[#95d324] hover:bg-[#84bd1e] text-[#090c12] font-extrabold text-[11px] transition cursor-pointer"
+                    >
+                      Preencher Fim Agora
+                    </button>
+                  ` : `
+                    <span class="text-[11px] font-mono-tech text-[#95d324]">✓ Encerrado na Planilha</span>
+                  `}
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      async function abrirModalHistorico(frota) {
+        estado.linhaQhaSelecionada = frota;
+        renderizarQuadroQHA();
+
+        document.getElementById("modal-hist-frota").textContent = frota;
+        document.getElementById("modal-hist-titulo").textContent = "Histórico Técnico • " + frota;
+        document.getElementById("modal-hist-subtitulo").textContent = "Consultando manutenções encerradas da máquina...";
+
+        const corpo = document.getElementById("modal-hist-corpo");
+        corpo.innerHTML = "<div class=\"p-6 text-center text-xs text-[#98989a]\">Buscando histórico real em manuntecao.xlsm...</div>";
+
+        const modal = document.getElementById("modal-historico");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+
+        try {
+          const res = await fetch("/api/historico/" + encodeURIComponent(frota));
+          const data = await res.json();
+          const registros = (data && data.registros) || [];
+
+          document.getElementById("modal-hist-subtitulo").textContent = registros.length + " intervenção(ões) com início e fim concluídos";
+
+          if (registros.length === 0) {
+            corpo.innerHTML = "<div class=\"bg-[#161d29] border border-[#232d3d] rounded-xl p-6 text-center\"><div class=\"text-sm font-bold text-white\">Nenhum histórico com horário Fim encontrado para " + frota + "</div></div>";
+            return;
+          }
+
+          corpo.innerHTML = registros.map((reg, i) => {
+            const corBorda = i === 0 ? "border-[#95d324]" : "border-[#00379e]";
+            const corDot = i === 0 ? "bg-[#95d324]" : "bg-[#00379e]";
+            return "<div class=\"relative pl-5 border-l-2 " + corBorda + " space-y-1.5\">" +
+              "<span class=\"absolute -left-[7px] top-1 w-3 h-3 rounded-full " + corDot + " border-2 border-[#10151e]\"></span>" +
+              "<div class=\"flex flex-wrap items-center justify-between gap-2\">" +
+                "<div class=\"flex items-center gap-2\">" +
+                  "<span class=\"font-mono-tech text-xs font-bold text-[#95d324]\">" + (reg.tipo || "Corretiva") + "</span>" +
+                  "<span class=\"text-xs text-neutral-300 font-semibold\">" + (reg.especialidade || "MANUTENÇÃO") + "</span>" +
+                "</div>" +
+                "<span class=\"font-mono-tech text-[11px] text-[#98989a]\">" + reg.inicio + " → <strong class=\"text-white\">" + reg.fim + "</strong></span>" +
+              "</div>" +
+              "<div class=\"text-xs text-white\"><strong>Motivo:</strong> " + reg.falha + "</div>" +
+              "<div class=\"bg-[#161d29] border border-[#232d3d] rounded-lg p-2.5 text-xs text-[#98989a]\">" +
+                "Executante: <span class=\"text-blue-300\">" + reg.executante + "</span> • Duração: <span class=\"text-white font-mono-tech\">" + reg.duracaoMin + " min</span>" +
+              "</div>" +
+            "</div>";
+          }).join("");
+        } catch (err) {
+          corpo.innerHTML = "<div class=\"p-6 text-center text-xs text-rose-400\">Falha ao buscar histórico técnico no servidor.</div>";
+        }
+      }
+
+      function fecharModalHistorico() {
+        const modal = document.getElementById('modal-historico');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+
+      function renderizarBarraAbas() {
+        const nav = document.getElementById('barra-abas');
+        const user = estado.usuarioAtual;
+        if (!nav || !user) return;
+
+        if (!user.abas.some((a) => a.id === estado.abaAtiva)) {
+          estado.abaAtiva = user.abas[0].id;
+        }
+
+        nav.innerHTML = user.abas.map((aba) => {
+          const ativa = aba.id === estado.abaAtiva;
+          let badgeExtra = '';
+          if (aba.id === 'pendencias') {
+            badgeExtra = `<span class="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono-tech ${ativa ? 'bg-[#95d324] text-[#090c12] font-extrabold' : 'bg-[#232d3d] text-white'}">${filaPendencias.length}</span>`;
+          }
+          if (aba.id === 'minhas-os') {
+            const qtdMec = ordensServico.filter((o) => o.status !== 'CONCLUIDA' && (user.perfil === 'ADMINISTRADOR' || o.mecanico.includes(user.nome))).length;
+            badgeExtra = `<span class="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono-tech ${ativa ? 'bg-[#95d324] text-[#090c12] font-extrabold' : 'bg-[#232d3d] text-white'}">${qtdMec}</span>`;
+          }
+
+          return `
+            <button
+              type="button"
+              data-aba-id="${aba.id}"
+              class="btn-aba px-3.5 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center cursor-pointer ${
+                ativa
+                  ? 'bg-[#00379e] text-white shadow'
+                  : 'text-[#98989a] hover:text-white hover:bg-[#161d29]'
+              }"
+            >
+              <span>${aba.label}</span>
+              ${badgeExtra}
+            </button>
+          `;
+        }).join('');
+
+        ['quadro', 'os', 'minhas-os', 'pendencias', 'acessos'].forEach((secId) => {
+          const el = document.getElementById(`aba-${secId}`);
+          if (el) {
+            if (secId === estado.abaAtiva) {
+              el.classList.remove('hidden');
+            } else {
+              el.classList.add('hidden');
+            }
+          }
+        });
+      }
+
+      function fmtDataHora(s) {
+        if (!s) return 'Nunca';
+        const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+        return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : s;
+      }
+
+      async function carregarUsuarios() {
+        if (!estado.usuarioAtual || estado.usuarioAtual.perfil !== 'ADMINISTRADOR') return;
+        try {
+          const data = await api('/api/usuarios');
+          listaUsuarios = data.usuarios || [];
+          renderizarGestaoAcessos();
+        } catch (e) {
+          mostrarToast('Erro ao carregar usuários', esc(e.message), 'warning');
+        }
+      }
+
+      async function carregarMecanicos() {
+        try {
+          const data = await api('/api/usuarios/mecanicos');
+          listaMecanicos = data.mecanicos || [];
+        } catch (_) {
+          listaMecanicos = [];
+        }
+        const sel = document.getElementById('os-mecanico');
+        if (!sel) return;
+        if (listaMecanicos.length === 0) {
+          sel.innerHTML = '<option value="">Nenhum mecânico cadastrado (peça ao administrador)</option>';
+        } else {
+          sel.innerHTML = listaMecanicos
+            .map((m) => `<option value="${esc(`${m.nome} (${fmtMat(m.matricula)})`)}">${esc(m.nome)} (${esc(fmtMat(m.matricula))})</option>`)
+            .join('');
+        }
+      }
+
+      function renderizarGestaoAcessos() {
+        const tbody = document.getElementById('tbody-gestao-acessos');
+        if (!tbody) return;
+        const eu = estado.usuarioAtual;
+
+        const aviso = document.getElementById('aviso-senha-padrao');
+        if (aviso) aviso.classList.toggle('hidden', !(eu && eu.trocarSenha));
+
+        const resumo = document.getElementById('resumo-acessos');
+        if (resumo) {
+          const ativos = listaUsuarios.filter((u) => u.ativo).length;
+          const card = (rotulo, valor, cor) => `
+            <div class="corp-card rounded-xl p-3.5">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-[#98989a]">${rotulo}</div>
+              <div class="text-2xl font-extrabold font-mono-tech ${cor}">${valor}</div>
+            </div>`;
+          resumo.innerHTML =
+            card('Usuários', listaUsuarios.length, 'text-white') +
+            card('Ativos', ativos, 'text-[#95d324]') +
+            card('Bloqueados', listaUsuarios.length - ativos, listaUsuarios.length - ativos ? 'text-rose-400' : 'text-white') +
+            card('Mecânicos', listaUsuarios.filter((u) => u.perfil === 'MECANICO').length, 'text-white') +
+            card('Administradores', listaUsuarios.filter((u) => u.perfil === 'ADMINISTRADOR').length, 'text-white');
+        }
+
+        const termo = (document.getElementById('busca-usuarios')?.value || '').trim().toLowerCase();
+        const fPerfil = document.getElementById('filtro-perfil-usuarios')?.value || '';
+        const fStatus = document.getElementById('filtro-status-usuarios')?.value || '';
+        const filtrados = listaUsuarios.filter((u) => {
+          if (fPerfil && u.perfil !== fPerfil) return false;
+          if (fStatus === 'ativo' && !u.ativo) return false;
+          if (fStatus === 'bloqueado' && u.ativo) return false;
+          if (termo && !`${u.nome} ${u.login} ${u.matricula}`.toLowerCase().includes(termo)) return false;
+          return true;
+        });
+
+        if (filtrados.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="py-8 px-4 text-center text-[#98989a]">Nenhum usuário encontrado.</td></tr>';
+          return;
+        }
+
+        const btn = 'px-2 py-1 rounded-md border text-[10px] font-bold cursor-pointer transition';
+        tbody.innerHTML = filtrados.map((u) => {
+          const souEu = eu && u.login === eu.login;
+          const status = u.ativo
+            ? '<span class="px-2 py-0.5 rounded bg-[#95d324]/15 border border-[#95d324]/60 text-[#95d324] font-mono-tech text-[10px] font-bold">ATIVO</span>'
+            : '<span class="px-2 py-0.5 rounded bg-rose-950/60 border border-rose-500/60 text-rose-300 font-mono-tech text-[10px] font-bold">BLOQUEADO</span>';
+          const pendente = u.trocarSenha ? '<div class="text-[10px] text-amber-300 mt-0.5">Senha provisória</div>' : '';
+          const chips = u.abas.map((a) => `<span class="inline-block px-1.5 py-0.5 rounded bg-[#090c12] border border-[#232d3d] text-[10px] text-neutral-300 mr-1 mb-1">${esc(ABAS_ROTULO[a] || a)}</span>`).join('');
+          return `
+          <tr class="hover:bg-[#161d29] ${u.ativo ? '' : 'opacity-70'}">
+            <td class="py-3 px-4">
+              <div class="font-semibold text-white">${esc(u.nome)}${souEu ? ' <span class="text-[10px] text-[#95d324]">(você)</span>' : ''}</div>
+              <div class="font-mono-tech text-[11px] text-[#95d324]">${esc(u.login)}</div>
+            </td>
+            <td class="py-3 px-4 font-mono-tech text-neutral-300">${esc(fmtMat(u.matricula))}</td>
+            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-[#00379e]/40 border border-[#00379e] text-blue-200 font-mono-tech text-[10px] font-bold">${esc(PERFIL_ROTULO[u.perfil] || u.perfil)}</span></td>
+            <td class="py-3 px-4 max-w-[260px]">${chips}</td>
+            <td class="py-3 px-4">${status}${pendente}</td>
+            <td class="py-3 px-4 text-[#98989a] font-mono-tech text-[11px]">${esc(fmtDataHora(u.ultimoAcesso))}</td>
+            <td class="py-3 px-4">
+              <div class="flex flex-wrap justify-end gap-1.5" data-login="${esc(u.login)}">
+                <button type="button" data-acao="editar" class="${btn} bg-[#161d29] border-[#232d3d] text-neutral-200 hover:border-[#00379e]">Editar</button>
+                <button type="button" data-acao="senha" class="${btn} bg-[#161d29] border-[#232d3d] text-neutral-200 hover:border-[#00379e]">Senha</button>
+                ${souEu ? '' : `<button type="button" data-acao="status" class="${btn} bg-[#161d29] border-[#232d3d] ${u.ativo ? 'text-amber-300 hover:border-amber-400' : 'text-[#95d324] hover:border-[#95d324]'}">${u.ativo ? 'Bloquear' : 'Ativar'}</button>
+                <button type="button" data-acao="excluir" class="${btn} bg-[#161d29] border-[#232d3d] text-rose-300 hover:border-rose-400">Excluir</button>`}
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+      }
+
+      function abrirModal(id) {
+        const m = document.getElementById(id);
+        if (!m) return;
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+      }
+      function fecharModal(id) {
+        const m = document.getElementById(id);
+        if (!m) return;
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+      }
+
+      function gerarSenhaAleatoria() {
+        const letras = 'abcdefghjkmnpqrstuvwxyz';
+        const nums = '23456789';
+        const pick = (set) => set[crypto.getRandomValues(new Uint32Array(1))[0] % set.length];
+        let s = '';
+        for (let i = 0; i < 5; i++) s += pick(letras);
+        for (let i = 0; i < 3; i++) s += pick(nums);
+        return s;
+      }
+
+      function atualizarPreviaAbas() {
+        const perfil = document.getElementById('usr-perfil').value;
+        document.getElementById('usr-abas-prev').textContent =
+          'Abas liberadas: ' + (PERFIL_ABAS[perfil] || []).map((a) => ABAS_ROTULO[a]).join(' • ');
+      }
+
+      function abrirModalUsuario(login) {
+        const editando = !!login;
+        const u = editando ? listaUsuarios.find((x) => x.login === login) : null;
+        document.getElementById('modal-usuario-titulo').textContent = editando ? 'Editar Usuário' : 'Novo Usuário';
+        document.getElementById('usr-modo').value = editando ? login : 'criar';
+        document.getElementById('usr-nome').value = u ? u.nome : '';
+        document.getElementById('usr-login').value = u ? u.login : '';
+        document.getElementById('usr-login').disabled = editando;
+        document.getElementById('usr-matricula').value = u ? u.matricula : '';
+        document.getElementById('usr-perfil').value = u ? u.perfil : 'MECANICO';
+        document.getElementById('usr-senha').value = editando ? '' : gerarSenhaAleatoria();
+        document.getElementById('usr-trocar').checked = true;
+        document.getElementById('usr-bloco-senha').classList.toggle('hidden', editando);
+        document.getElementById('usr-senha').required = !editando;
+        document.getElementById('usr-erro').classList.add('hidden');
+        atualizarPreviaAbas();
+        abrirModal('modal-usuario');
+        document.getElementById('usr-nome').focus();
+      }
+
+      function abrirModalSenha(login) {
+        const propria = login === null;
+        document.getElementById('modal-senha-titulo').textContent = propria ? 'Alterar minha senha' : `Redefinir senha de ${login}`;
+        document.getElementById('sen-alvo').value = propria ? '' : login;
+        document.getElementById('sen-atual').value = '';
+        document.getElementById('sen-nova').value = '';
+        document.getElementById('sen-nova').type = 'password';
+        document.getElementById('sen-mostrar').checked = false;
+        document.getElementById('sen-bloco-atual').classList.toggle('hidden', !propria);
+        document.getElementById('sen-bloco-trocar').classList.toggle('hidden', propria);
+        document.getElementById('sen-bloco-trocar').classList.toggle('flex', !propria);
+        document.getElementById('sen-erro').classList.add('hidden');
+        abrirModal('modal-senha');
+        document.getElementById(propria ? 'sen-atual' : 'sen-nova').focus();
+      }
+
+      async function acaoUsuario(login, acao) {
+        const u = listaUsuarios.find((x) => x.login === login);
+        if (!u) return;
+        if (acao === 'editar') return abrirModalUsuario(login);
+        if (acao === 'senha') return abrirModalSenha(login);
+        try {
+          if (acao === 'status') {
+            const msg = u.ativo
+              ? `Bloquear o acesso de ${u.nome}? Ele não conseguirá mais entrar.`
+              : `Reativar o acesso de ${u.nome}?`;
+            if (!confirm(msg)) return;
+            await api(`/api/usuarios/${encodeURIComponent(login)}`, { method: 'PUT', body: { ativo: !u.ativo } });
+            mostrarToast(u.ativo ? 'Acesso bloqueado' : 'Acesso reativado', esc(u.nome), 'info');
+          } else if (acao === 'excluir') {
+            if (!confirm(`Excluir definitivamente o usuário "${u.login}" (${u.nome})? Esta ação não pode ser desfeita.`)) return;
+            await api(`/api/usuarios/${encodeURIComponent(login)}`, { method: 'DELETE' });
+            mostrarToast('Usuário excluído', esc(u.nome), 'info');
+          }
+          await carregarUsuarios();
+          carregarMecanicos();
+        } catch (e) {
+          mostrarToast('Não foi possível concluir', esc(e.message), 'warning');
+        }
+      }
+
+      function ligarGestaoAcessos() {
+        document.getElementById('btn-novo-usuario')?.addEventListener('click', () => abrirModalUsuario(null));
+        document.getElementById('btn-minha-senha')?.addEventListener('click', () => abrirModalSenha(null));
+        document.getElementById('btn-aviso-trocar-senha')?.addEventListener('click', () => abrirModalSenha(null));
+        document.getElementById('usr-perfil')?.addEventListener('change', atualizarPreviaAbas);
+        document.getElementById('btn-gerar-senha')?.addEventListener('click', () => {
+          document.getElementById('usr-senha').value = gerarSenhaAleatoria();
+        });
+        document.getElementById('btn-sen-gerar')?.addEventListener('click', () => {
+          const i = document.getElementById('sen-nova');
+          i.value = gerarSenhaAleatoria();
+          i.type = 'text';
+          document.getElementById('sen-mostrar').checked = true;
+        });
+        document.getElementById('sen-mostrar')?.addEventListener('change', (e) => {
+          document.getElementById('sen-nova').type = e.target.checked ? 'text' : 'password';
+        });
+        document.querySelectorAll('[data-fechar-modal]').forEach((b) => {
+          b.addEventListener('click', () => fecharModal(b.getAttribute('data-fechar-modal')));
+        });
+        ['busca-usuarios', 'filtro-perfil-usuarios', 'filtro-status-usuarios'].forEach((id) => {
+          document.getElementById(id)?.addEventListener('input', renderizarGestaoAcessos);
+        });
+        document.getElementById('tbody-gestao-acessos')?.addEventListener('click', (e) => {
+          const b = e.target.closest('[data-acao]');
+          if (!b) return;
+          acaoUsuario(b.parentElement.getAttribute('data-login'), b.getAttribute('data-acao'));
+        });
+
+        document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const erro = document.getElementById('usr-erro');
+          erro.classList.add('hidden');
+          const modo = document.getElementById('usr-modo').value;
+          const corpo = {
+            nome: document.getElementById('usr-nome').value.trim(),
+            matricula: document.getElementById('usr-matricula').value.trim(),
+            perfil: document.getElementById('usr-perfil').value
+          };
+          const salvar = document.getElementById('btn-salvar-usuario');
+          salvar.disabled = true;
+          try {
+            if (modo === 'criar') {
+              corpo.login = document.getElementById('usr-login').value.trim().toLowerCase();
+              corpo.senha = document.getElementById('usr-senha').value;
+              corpo.trocarSenha = document.getElementById('usr-trocar').checked;
+              await api('/api/usuarios', { method: 'POST', body: corpo });
+              mostrarToast('Usuário criado', `${esc(corpo.nome)} • login <b>${esc(corpo.login)}</b> • senha: <b>${esc(corpo.senha)}</b>`, 'success');
+            } else {
+              await api(`/api/usuarios/${encodeURIComponent(modo)}`, { method: 'PUT', body: corpo });
+              mostrarToast('Usuário atualizado', esc(corpo.nome), 'success');
+            }
+            fecharModal('modal-usuario');
+            await carregarUsuarios();
+            carregarMecanicos();
+          } catch (err) {
+            erro.textContent = err.message;
+            erro.classList.remove('hidden');
+          } finally {
+            salvar.disabled = false;
+          }
+        });
+
+        document.getElementById('form-senha')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const erro = document.getElementById('sen-erro');
+          erro.classList.add('hidden');
+          const alvo = document.getElementById('sen-alvo').value;
+          const nova = document.getElementById('sen-nova').value;
+          try {
+            if (!alvo) {
+              const data = await api('/api/me/senha', {
+                method: 'POST',
+                body: { senhaAtual: document.getElementById('sen-atual').value, novaSenha: nova }
+              });
+              estado.usuarioAtual = montarUsuarioUI(data.usuario);
+              mostrarToast('Senha alterada', 'Use a nova senha no próximo acesso.', 'success');
+            } else {
+              await api(`/api/usuarios/${encodeURIComponent(alvo)}/senha`, {
+                method: 'POST',
+                body: { novaSenha: nova, trocarSenha: document.getElementById('sen-trocar').checked }
+              });
+              mostrarToast('Senha redefinida', `Nova senha de <b>${esc(alvo)}</b>: <b>${esc(nova)}</b>`, 'success');
+            }
+            fecharModal('modal-senha');
+            await carregarUsuarios();
+            renderizarGestaoAcessos();
+          } catch (err) {
+            erro.textContent = err.message;
+            erro.classList.remove('hidden');
+          }
+        });
+      }
+
+      function popularSelectsFrota() {
+        const selOs = document.getElementById('os-frota');
+        const frotas = planilhaXlsmRows.length > 0
+          ? planilhaXlsmRows.map((r) => ({ frota: r.frota, cat: r.categoria.replace('EQUIPAMENTO ', '') }))
+          : CATALOGO_FROTAS.map((f) => ({ frota: f.frota, cat: f.categoria.replace('EQUIPAMENTO ', '') }));
+
+        const vistas = new Set();
+        const optionsHtml = frotas
+          .filter(({ frota }) => { if (vistas.has(frota)) return false; vistas.add(frota); return true; })
+          .map(({ frota, cat }) => `<option value="${frota}">${frota} (${cat})</option>`)
+          .join('');
+
+        if (selOs) selOs.innerHTML = optionsHtml;
+      }
+
+      function renderizarTudo() {
+        renderizarBarraAbas();
+        renderizarQuadroQHA();
+        renderizarListaMecanico();
+        renderizarOsEncarregado();
+        renderizarFilaPendenciasESimulador();
+        renderizarGestaoAcessos();
+      }
+
+      function entrarNoSistema(usuarioApi, boasVindas = true) {
+        const user = montarUsuarioUI(usuarioApi);
+        estado.usuarioAtual = user;
+        estado.abaAtiva = user.abas[0].id;
+
+        document.getElementById('header-avatar-sigla').textContent = user.sigla;
+        document.getElementById('header-nome-usuario').textContent = user.nome;
+        document.getElementById('header-badge-perfil').textContent = `${user.perfil} • ${user.matricula}`;
+
+        const kpiSync = document.getElementById('kpi-ultima-atualizacao');
+        if (kpiSync && kpiSync.textContent === '--:--:--') {
+          kpiSync.textContent = horaAtualSegundos();
+        }
+
+        document.getElementById('tela-login').classList.add('hidden');
+        document.getElementById('tela-sistema').classList.remove('hidden');
+
+        renderizarTudo();
+        sincronizarComPlanilhaRealDrive(false);
+        carregarMecanicos();
+        carregarUsuarios();
+        if (boasVindas) {
+          mostrarToast('Acesso Confirmado', `${esc(user.nome)} (${esc(user.perfil)}) autenticado com sucesso.`, 'success');
+          if (user.trocarSenha) {
+            mostrarToast('Troque sua senha', 'Você está usando uma senha provisória. Clique em "Minha Senha".', 'warning');
+          }
+        }
+      }
+
+      function sairDoSistema() {
+        estado.usuarioAtual = null;
+        listaUsuarios = [];
+        document.body.classList.remove('modo-tv-ativo');
+        document.getElementById('tela-sistema').classList.add('hidden');
+        document.getElementById('tela-login').classList.remove('hidden');
+        document.getElementById('input-senha').value = '';
+      }
+
+      function inicializar() {
+        popularSelectsFrota();
+
+        setInterval(() => {
+          if (!estado.usuarioAtual) return;
+          estado.segundosRestantesVarredura -= 1;
+          if (estado.segundosRestantesVarredura <= 0) {
+            sincronizarComPlanilhaRealDrive(false);
+            executarVarreduraPlanilha(false);
+          } else {
+            atualizarDisplayTimer10m();
+          }
+        }, 1000);
+
+        ligarGestaoAcessos();
+
+        // ===================================================================
+        // CONTROLE DO MODO TV FIXO (CABE 100% NA TELA SEM ROLAGEM)
+        // ===================================================================
+        let intervaloTvSync = null;
+
+        function ativarModoTv() {
+          estado.abaAtiva = 'quadro';
+          renderizarTudo();
+          document.body.classList.add('modo-tv-ativo');
+
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
+
+          setTimeout(ajustarEscalaTabelaTv, 50);
+
+          clearInterval(intervaloTvSync);
+          intervaloTvSync = setInterval(() => {
+            sincronizarComPlanilhaRealDrive(false).then(ajustarEscalaTabelaTv);
+          }, 60000);
+
+          mostrarToast('Modo TV Fixo Ativado', 'Todos os equipamentos ajustados na tela sem rolagem.', 'success');
+        }
+
+        function desativarModoTv() {
+          document.body.classList.remove('modo-tv-ativo');
+          clearInterval(intervaloTvSync);
+
+          document.querySelectorAll('#aba-quadro .tabela-qha-industrial tbody tr').forEach((tr) => {
+            tr.style.height = '';
+            tr.style.fontSize = '';
+          });
+
+          if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+        }
+
+        window.addEventListener('resize', ajustarEscalaTabelaTv);
+        document.getElementById('btn-modo-tv')?.addEventListener('click', ativarModoTv);
+        document.getElementById('btn-sair-modo-tv')?.addEventListener('click', desativarModoTv);
+
+        document.addEventListener('fullscreenchange', () => {
+          if (!document.fullscreenElement && document.body.classList.contains('modo-tv-ativo')) {
+            desativarModoTv();
+          } else {
+            setTimeout(ajustarEscalaTabelaTv, 80);
+          }
+        });
+
+        const formLogin = document.getElementById('form-login');
+        if (formLogin) {
+          formLogin.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const login = (document.getElementById('input-usuario').value || '').trim().toLowerCase();
+            const senha = document.getElementById('input-senha').value || '';
+            const erroBox = document.getElementById('erro-login');
+            const botao = formLogin.querySelector('button[type="submit"]');
+            botao.disabled = true;
+            try {
+              const data = await api('/api/login', { method: 'POST', body: { login, senha } });
+              erroBox.classList.add('hidden');
+              entrarNoSistema(data.usuario);
+            } catch (err) {
+              document.getElementById('erro-login-texto').textContent = err.message;
+              erroBox.classList.remove('hidden');
+            } finally {
+              botao.disabled = false;
+            }
+          });
+        }
+
+        fetch('/api/me', { credentials: 'same-origin' })
+          .then((r) => r.json())
+          .then((d) => { if (d && d.usuario) entrarNoSistema(d.usuario, false); })
+          .catch(() => {});
+
+        document.getElementById('btn-sair-login')?.addEventListener('click', async () => {
+          desativarModoTv();
+          try { await api('/api/logout', { method: 'POST' }); } catch (_) {}
+          sairDoSistema();
+        });
+
+        document.getElementById('btn-testar-sirene')?.addEventListener('click', () => {
+          acionarSireneIndustrial(true);
+        });
+
+        document.getElementById('btn-fechar-banner')?.addEventListener('click', () => {
+          document.getElementById('banner-alerta-saida')?.classList.add('hidden');
+        });
+
+        document.getElementById('btn-sincronizar-planilha-real')?.addEventListener('click', () => {
+          sincronizarComPlanilhaRealDrive(true);
+        });
+
+        document.getElementById('barra-abas')?.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-aba-id]');
+          if (!btn) return;
+          estado.abaAtiva = btn.getAttribute('data-aba-id');
+          renderizarTudo();
+        });
+
+        document.getElementById('qha-category-pills')?.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-qha-cat]');
+          if (!btn) return;
+          estado.qhaCategoriaFiltro = btn.getAttribute('data-qha-cat');
+
+          document.querySelectorAll('.qha-cat-btn').forEach((b) => {
+            if (b.getAttribute('data-qha-cat') === estado.qhaCategoriaFiltro) {
+              b.className = 'qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-[#00379e] text-white transition whitespace-nowrap cursor-pointer';
+            } else {
+              b.className = 'qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer';
+            }
+          });
+          renderizarQuadroQHA();
+        });
+
+        document.getElementById('qha-busca-texto')?.addEventListener('input', renderizarQuadroQHA);
+
+        document.getElementById('tbody-qha-industrial')?.addEventListener('click', (e) => {
+          const tr = e.target.closest('tr[data-qha-frota]');
+          if (!tr) return;
+          const frota = tr.getAttribute('data-qha-frota');
+          abrirModalHistorico(frota);
+        });
+
+        document.getElementById('btn-foto-simulada')?.addEventListener('click', () => {
+          const frota = document.getElementById('os-frota').value;
+          const tipo = document.getElementById('os-tipo').value;
+          const desc = document.getElementById('os-descricao').value.trim() || 'INSPEÇÃO TÉCNICA EM CAMPO';
+          estado.fotoAnexadaDataUrl = gerarSvgEvidencia(frota, tipo, desc);
+          document.getElementById('os-foto-preview-img').src = estado.fotoAnexadaDataUrl;
+          document.getElementById('os-foto-nome').textContent = `evidencia_${frota}.svg`;
+          document.getElementById('os-foto-preview-wrap').classList.remove('hidden');
+        });
+
+        document.getElementById('os-foto-input')?.addEventListener('change', async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          estado.fotoAnexadaDataUrl = await lerArquivoBase64(file);
+          document.getElementById('os-foto-preview-img').src = estado.fotoAnexadaDataUrl;
+          document.getElementById('os-foto-nome').textContent = file.name;
+          document.getElementById('os-foto-preview-wrap').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-remover-foto')?.addEventListener('click', () => {
+          estado.fotoAnexadaDataUrl = null;
+          document.getElementById('os-foto-input').value = '';
+          document.getElementById('os-foto-preview-wrap').classList.add('hidden');
+        });
+
+        document.getElementById('form-nova-os')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const btn = document.getElementById('btn-submit-nova-os');
+          btn.disabled = true;
+          btn.textContent = 'Gravando no Google Drive...';
+
+          const frota = document.getElementById('os-frota').value;
+          const tipo = document.getElementById('os-tipo').value;
+          const especialidade = document.getElementById('os-especialidade').value;
+          const mecanico = document.getElementById('os-mecanico').value;
+          const descricao = document.getElementById('os-descricao').value.trim().toUpperCase();
+          const novaOsId = `OS-${Math.floor(1044 + Math.random() * 8900)}`;
+          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === frota);
+
+          ordensServico.unshift({
+            id: novaOsId,
+            frota,
+            tipo,
+            especialidade,
+            descricao,
+            mecanico,
+            status: 'DESTINADA',
+            abertura: agoraFormatado(),
+            foto: estado.fotoAnexadaDataUrl
+          });
+
+          filaPendencias.unshift({
+            id: `PEND-${Math.floor(100 + Math.random() * 899)}`,
+            osId: novaOsId,
+            frota,
+            tipoPendencia: 'ENTRADA',
+            motivo: 'OS aberta pelo Encarregado • Aguardando lançamento de "Início" em manuntecao.xlsm',
+            solicitante: estado.usuarioAtual ? estado.usuarioAtual.nome : 'Encarregado',
+            criadoEm: agoraFormatado(),
+            criadoEmTs: Date.now()
+          });
+
+          await gravarLogNoGoogleDrive('entrada', {
+            id_os: novaOsId,
+            equipamento: frota,
+            frota: catInfo ? catInfo.categoria : 'EQUIPAMENTO MINA',
+            motivo: `${tipo} - ${descricao}`,
+            prioridade: tipo === 'Corretiva' ? 'Alta' : 'Média',
+            usuario: estado.usuarioAtual ? estado.usuarioAtual.nome : 'Encarregado',
+            imagem_base64: estado.fotoAnexadaDataUrl || ''
+          });
+
+          document.getElementById('os-descricao').value = '';
+          estado.fotoAnexadaDataUrl = null;
+          document.getElementById('os-foto-preview-wrap').classList.add('hidden');
+          btn.disabled = false;
+          btn.textContent = 'Emitir OS & Gravar Log de Entrada no Drive';
+
+          acionarSireneIndustrial(false);
+          renderizarTudo();
+          mostrarToast('OS Emitida & Direcionada', `${novaOsId} (${frota}) enviada para ${mecanico} e adicionada à Fila CCO.`, 'success');
+        });
+
+        document.body.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-acao]');
+          if (!btn) return;
+          const acao = btn.getAttribute('data-acao');
+
+          if (acao === 'abrir-historico') {
+            abrirModalHistorico(btn.getAttribute('data-frota'));
+          }
+
+          if (acao === 'ver-foto') {
+            const osId = btn.getAttribute('data-os-id');
+            const os = ordensServico.find((o) => o.id === osId);
+            if (os && os.foto) {
+              document.getElementById('modal-foto-titulo').textContent = `Evidência Fotográfica • ${os.id} (${os.frota})`;
+              document.getElementById('modal-foto-img').src = os.foto;
+              const m = document.getElementById('modal-foto');
+              m.classList.remove('hidden');
+              m.classList.add('flex');
+            }
+          }
+
+          if (acao === 'iniciar-os') {
+            const osId = btn.getAttribute('data-os-id');
+            const os = ordensServico.find((o) => o.id === osId);
+            if (os) {
+              os.status = 'EM_EXECUCAO';
+              renderizarTudo();
+              mostrarToast('Atendimento Iniciado', `${os.id} (${os.frota}) marcada como Em Execução.`, 'info');
+            }
+          }
+
+          if (acao === 'abrir-finalizar') {
+            const osId = btn.getAttribute('data-os-id');
+            const os = ordensServico.find((o) => o.id === osId);
+            const cat = CATALOGO_FROTAS.find((f) => f.frota === os?.frota);
+            if (os) {
+              document.getElementById('fin-os-id').value = os.id;
+              document.getElementById('fin-os-titulo').textContent = `${os.id} • ${os.frota}`;
+              document.getElementById('fin-os-servico').value = '';
+              document.getElementById('fin-os-pecas').value = '';
+              document.getElementById('fin-os-horimetro').value = cat ? cat.horimetro : 12000;
+              document.getElementById('fin-os-foto').value = '';
+              const m = document.getElementById('modal-finalizar-os');
+              m.classList.remove('hidden');
+              m.classList.add('flex');
+            }
+          }
+
+          if (acao === 'preencher-fim-xlsm') {
+            const rowId = btn.getAttribute('data-row-id');
+            const row = planilhaXlsmRows.find((r) => r.rowId === rowId);
+            if (row) {
+              row.fim = agoraFormatado();
+              renderizarFilaPendenciasESimulador();
+              mostrarToast(
+                'Horário "Fim" Preenchido na Planilha',
+                `Linha de ${row.frota} encerrada em manuntecao.xlsm. Clique em "Executar Varredura 10 min Agora" ou aguarde o ciclo para dar baixa automática.`,
+                'warning'
+              );
+            }
+          }
+        });
+
+        document.getElementById('form-finalizar-os')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const btn = document.getElementById('btn-submit-fin-os');
+          btn.disabled = true;
+          btn.textContent = 'Gravando no Google Drive...';
+
+          const osId = document.getElementById('fin-os-id').value;
+          const servico = document.getElementById('fin-os-servico').value.trim();
+          const pecas = document.getElementById('fin-os-pecas').value.trim();
+          const horimetro = Number(document.getElementById('fin-os-horimetro').value);
+          const fotoFile = document.getElementById('fin-os-foto').files?.[0];
+          const fotoBase64 = await lerArquivoBase64(fotoFile);
+
+          const os = ordensServico.find((o) => o.id === osId);
+          if (!os) return;
+          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === os.frota);
+
+          os.status = 'CONCLUIDA';
+
+          if (!historicoTecnicoDB[os.frota]) {
+            historicoTecnicoDB[os.frota] = [];
+          }
+          historicoTecnicoDB[os.frota].unshift({
+            osCode: os.id,
+            data: agoraFormatado(),
+            horimetro,
+            tipo: os.tipo,
+            especialidade: os.especialidade,
+            falha: os.descricao,
+            servico,
+            pecas,
+            executante: os.mecanico
+          });
+
+          filaPendencias.unshift({
+            id: `PEND-${Math.floor(100 + Math.random() * 899)}`,
+            osId: os.id,
+            frota: os.frota,
+            tipoPendencia: 'BAIXA',
+            motivo: 'OS finalizada pelo mecânico • Permanece no QHA até preenchimento da coluna "Fim" em manuntecao.xlsm',
+            solicitante: os.mecanico,
+            criadoEm: agoraFormatado(),
+            criadoEmTs: Date.now()
+          });
+
+          await gravarLogNoGoogleDrive('retirada', {
+            id_os: os.id,
+            equipamento: os.frota,
+            frota: catInfo ? catInfo.categoria : 'EQUIPAMENTO MINA',
+            servico: `${servico} (Peças: ${pecas} | Horímetro: ${horimetro}h)`,
+            mecanico: os.mecanico,
+            usuario: estado.usuarioAtual ? estado.usuarioAtual.nome : os.mecanico,
+            imagem_base64: fotoBase64
+          });
+
+          btn.disabled = false;
+          btn.textContent = '✓ Finalizar & Salvar no Drive';
+
+          const m = document.getElementById('modal-finalizar-os');
+          m.classList.add('hidden');
+          m.classList.remove('flex');
+
+          renderizarTudo();
+          mostrarToast(
+            'OS Finalizada & Histórico Gravado',
+            `Frota ${os.frota} permanece no QHA até que o CCO preencha o horário "Fim" em manuntecao.xlsm.`,
+            'success'
+          );
+        });
+
+        document.getElementById('form-simulador-xlsm-entrada')?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const frota = document.getElementById('xlsm-nova-frota').value;
+          const comentario = document.getElementById('xlsm-novo-comentario').value.trim().toUpperCase();
+          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === frota) || {
+            categoria: 'EQUIPAMENTO MINA',
+            local: 'OFICINA FAGUNDES',
+            horimetro: 15000
+          };
+
+          planilhaXlsmRows.unshift({
+            rowId: `ROW-${Math.floor(10 + Math.random() * 89)}`,
+            frota,
+            categoria: catInfo.categoria,
+            inicio: agoraFormatado(),
+            fim: '',
+            duracaoMin: 15.0,
+            especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
+            matricula: String(estado.usuarioAtual?.matricula || '').replace(/^Mat\.\s*/i, '') || '-',
+            executante: estado.usuarioAtual?.nome || '-',
+            horimetro: catInfo.horimetro,
+            tipo: 'Corretiva',
+            local: catInfo.local,
+            comentario
+          });
+
+          document.getElementById('xlsm-novo-comentario').value = '';
+          renderizarTudo();
+          mostrarToast('Linha Gravada na Planilha', `${frota} inserida com "Início" preenchido e "Fim" vazio (ativa no QHA).`, 'info');
+        });
+
+        document.getElementById('btn-varredura-agora')?.addEventListener('click', () => {
+          executarVarreduraPlanilha(true);
+        });
+
+        document.getElementById('btn-fechar-modal-hist')?.addEventListener('click', fecharModalHistorico);
+        document.getElementById('btn-rodape-fechar-hist')?.addEventListener('click', fecharModalHistorico);
+        document.getElementById('modal-historico')?.addEventListener('click', (e) => {
+          if (e.target.id === 'modal-historico') fecharModalHistorico();
+        });
+
+        const fecharFin = () => {
+          const m = document.getElementById('modal-finalizar-os');
+          m.classList.add('hidden');
+          m.classList.remove('flex');
+        };
+        document.getElementById('btn-fechar-modal-fin')?.addEventListener('click', fecharFin);
+        document.getElementById('btn-cancelar-modal-fin')?.addEventListener('click', fecharFin);
+
+        document.getElementById('btn-fechar-modal-foto')?.addEventListener('click', () => {
+          const m = document.getElementById('modal-foto');
+          m.classList.add('hidden');
+          m.classList.remove('flex');
+        });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', inicializar);
+      } else {
+        inicializar();
+      }
+    })();
+  </script>
+</body>
+</html>
