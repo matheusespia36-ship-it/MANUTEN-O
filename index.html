@@ -433,7 +433,7 @@
     <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 space-y-5">
 
       <!-- =================================================================== -->
-      <!-- ABA 1: QUADRO DE MANUTENÇÕES (QHA) - SEM FILTRO DE LOCAL            -->
+      <!-- ABA 1: QUADRO DE MANUTENÇÕES (QHA) - ORDENADO POR TIPO DE FROTA     -->
       <!-- =================================================================== -->
       <section id="aba-quadro" class="hidden space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -473,6 +473,7 @@
             placeholder="Buscar por frota, especialidade ou comentário..."
             class="w-full lg:max-w-sm bg-[#090c12] border border-[#232d3d] rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:border-[#00379e] focus:outline-none"
           />
+          <span class="text-[11px] text-[#98989a]">Ordem: <strong class="text-white">Caminhões → Escavadeiras → Perfuratrizes → Outros</strong></span>
         </div>
 
         <div class="corp-card rounded-xl overflow-hidden">
@@ -985,6 +986,25 @@
         return /^mat/i.test(t) ? t : `Mat. ${t}`;
       }
 
+      // =====================================================================
+      // ORDENAÇÃO PADRÃO DA FROTA:
+      // 1º Caminhões (C..., CR...) | 2º Escavadeiras (EH...) | 3º Perfuratrizes | 4º Outros
+      // =====================================================================
+      function prioridadeFrota(frota) {
+        const cod = String(frota || '').trim().toUpperCase();
+        if (/^(C\d|CR|CAM)/.test(cod)) return 1;         // 1º Caminhões (C1964, C2201, CR54...)
+        if (/^(EH|ESC)/.test(cod)) return 2;             // 2º Escavadeiras (EH697, EH711...)
+        if (/^(PF|PW|PR|DP|PV|PERF)/.test(cod)) return 3; // 3º Perfuratrizes
+        return 4;                                        // 4º Outros equipamentos
+      }
+
+      function compararFrotas(a, b) {
+        const pA = prioridadeFrota(a);
+        const pB = prioridadeFrota(b);
+        if (pA !== pB) return pA - pB;
+        return String(a).localeCompare(String(b), 'pt-BR', { numeric: true });
+      }
+
       function montarUsuarioUI(u) {
         return {
           ...u,
@@ -1308,6 +1328,9 @@
             row.especialidade.toUpperCase().includes(busca) ||
             row.comentario.toUpperCase().includes(busca);
         });
+
+        // Ordena: 1º Caminhões (C, CR) -> 2º Escavadeiras (EH) -> 3º Perfuratrizes -> 4º Outros
+        filtrados.sort((a, b) => compararFrotas(a.frota, b.frota));
 
         const contadorEl = document.getElementById('qha-contador-filtrado');
         if (contadorEl) contadorEl.textContent = `${filtrados.length} equipamento${filtrados.length === 1 ? '' : 's'}`;
@@ -1985,8 +2008,16 @@
           : CATALOGO_FROTAS.map((f) => ({ frota: f.frota, cat: f.categoria.replace('EQUIPAMENTO ', '') }));
 
         const vistas = new Set();
-        const optionsHtml = frotas
-          .filter(({ frota }) => { if (vistas.has(frota)) return false; vistas.add(frota); return true; })
+        const listaUnica = frotas.filter(({ frota }) => {
+          if (vistas.has(frota)) return false;
+          vistas.add(frota);
+          return true;
+        });
+
+        // Ordena também o seletor de frotas (Caminhões -> Escavadeiras -> Perfuratrizes -> Outros)
+        listaUnica.sort((a, b) => compararFrotas(a.frota, b.frota));
+
+        const optionsHtml = listaUnica
           .map(({ frota, cat }) => `<option value="${frota}">${frota} (${cat})</option>`)
           .join('');
 
@@ -2156,21 +2187,6 @@
           if (!btn) return;
           estado.abaAtiva = btn.getAttribute('data-aba-id');
           renderizarTudo();
-        });
-
-        document.getElementById('qha-category-pills')?.addEventListener('click', (e) => {
-          const btn = e.target.closest('[data-qha-cat]');
-          if (!btn) return;
-          estado.qhaCategoriaFiltro = btn.getAttribute('data-qha-cat');
-
-          document.querySelectorAll('.qha-cat-btn').forEach((b) => {
-            if (b.getAttribute('data-qha-cat') === estado.qhaCategoriaFiltro) {
-              b.className = 'qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-[#00379e] text-white transition whitespace-nowrap cursor-pointer';
-            } else {
-              b.className = 'qha-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161d29] text-[#98989a] hover:text-white border border-[#232d3d] transition whitespace-nowrap cursor-pointer';
-            }
-          });
-          renderizarQuadroQHA();
         });
 
         document.getElementById('qha-busca-texto')?.addEventListener('input', renderizarQuadroQHA);
@@ -2396,37 +2412,6 @@
             `Frota ${os.frota} permanece no QHA até que o CCO preencha o horário "Fim" em manuntecao.xlsm.`,
             'success'
           );
-        });
-
-        document.getElementById('form-simulador-xlsm-entrada')?.addEventListener('submit', (e) => {
-          e.preventDefault();
-          const frota = document.getElementById('xlsm-nova-frota').value;
-          const comentario = document.getElementById('xlsm-novo-comentario').value.trim().toUpperCase();
-          const catInfo = CATALOGO_FROTAS.find((f) => f.frota === frota) || {
-            categoria: 'EQUIPAMENTO MINA',
-            local: 'OFICINA FAGUNDES',
-            horimetro: 15000
-          };
-
-          planilhaXlsmRows.unshift({
-            rowId: `ROW-${Math.floor(10 + Math.random() * 89)}`,
-            frota,
-            categoria: catInfo.categoria,
-            inicio: agoraFormatado(),
-            fim: '',
-            duracaoMin: 15.0,
-            especialidade: 'MANUTENÇÃO 205 MANUTENÇÃO CORRETIVA MECÂNICA',
-            matricula: String(estado.usuarioAtual?.matricula || '').replace(/^Mat\.\s*/i, '') || '-',
-            executante: estado.usuarioAtual?.nome || '-',
-            horimetro: catInfo.horimetro,
-            tipo: 'Corretiva',
-            local: catInfo.local,
-            comentario
-          });
-
-          document.getElementById('xlsm-novo-comentario').value = '';
-          renderizarTudo();
-          mostrarToast('Linha Gravada na Planilha', `${frota} inserida com "Início" preenchido e "Fim" vazio (ativa no QHA).`, 'info');
         });
 
         document.getElementById('btn-varredura-agora')?.addEventListener('click', () => {
