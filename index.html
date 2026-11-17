@@ -153,41 +153,58 @@
       animation: pulso-corporativo 2s infinite ease-in-out;
     }
 
-    /* MODO TV EM TELA CHEIA (APÓS LOGIN) */
+    /* MODO TV PURO (APENAS A TABELA NA TELA INTEIRA) */
     body.modo-tv-ativo {
       overflow: hidden;
+      background: #ffffff;
     }
-    body.modo-tv-ativo #barra-abas,
-    body.modo-tv-ativo #btn-testar-sirene,
-    body.modo-tv-ativo #btn-minha-senha,
-    body.modo-tv-ativo #btn-sair-login,
-    body.modo-tv-ativo #btn-modo-tv,
-    body.modo-tv-ativo #qha-busca-texto,
-    body.modo-tv-ativo #btn-sincronizar-planilha-real {
-      display: none !important;
-    }
-    body.modo-tv-ativo #btn-sair-modo-tv {
-      display: inline-flex !important;
-    }
-    body.modo-tv-ativo #aba-quadro > div:nth-child(2) {
+    body.modo-tv-ativo header,
+    body.modo-tv-ativo #banner-alerta-saida,
+    body.modo-tv-ativo #aba-quadro > div:nth-child(1),
+    body.modo-tv-ativo #aba-quadro > div:nth-child(2),
+    body.modo-tv-ativo #aba-quadro > div:nth-child(3) > div:first-child {
       display: none !important;
     }
     body.modo-tv-ativo main {
       max-width: 100% !important;
-      padding: 12px 20px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+    body.modo-tv-ativo #aba-quadro,
+    body.modo-tv-ativo #aba-quadro > div:nth-child(3) {
+      border: none !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+      box-shadow: none !important;
+    }
+    body.modo-tv-ativo #aba-quadro .overflow-x-auto {
+      max-height: 100vh !important;
+      height: 100vh !important;
     }
     body.modo-tv-ativo .tabela-qha-industrial {
-      font-size: 16.5px !important;
+      font-size: 18px !important;
     }
     body.modo-tv-ativo .tabela-qha-industrial thead th {
-      font-size: 14px !important;
-      padding: 12px 14px !important;
+      font-size: 15px !important;
+      padding: 14px 16px !important;
       position: sticky;
       top: 0;
       z-index: 10;
     }
     body.modo-tv-ativo .tabela-qha-industrial tbody td {
-      padding: 11px 14px !important;
+      padding: 12px 16px !important;
+    }
+    body.modo-tv-ativo #btn-sair-modo-tv {
+      display: inline-flex !important;
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      z-index: 9999;
+      opacity: 0.25;
+      transition: opacity 0.2s ease;
+    }
+    body.modo-tv-ativo #btn-sair-modo-tv:hover {
+      opacity: 1;
     }
 
     ::-webkit-scrollbar {
@@ -328,15 +345,6 @@
           >
             <span>📺</span>
             <span>Modo TV</span>
-          </button>
-
-          <button
-            type="button"
-            id="btn-sair-modo-tv"
-            class="hidden items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition cursor-pointer shadow"
-          >
-            <span>✕</span>
-            <span>Sair do Modo TV</span>
           </button>
 
           <button
@@ -911,6 +919,16 @@
       </div>
     </div>
   </div>
+
+  <!-- BOTÃO FLUTUANTE PARA SAIR DO MODO TV -->
+  <button
+    type="button"
+    id="btn-sair-modo-tv"
+    class="hidden items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3.5 py-2 rounded-lg cursor-pointer shadow-lg"
+  >
+    <span>✕</span>
+    <span>Sair do Modo TV (ESC)</span>
+  </button>
 
   <!-- TOAST DE NOTIFICAÇÃO CORPORATIVA -->
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
@@ -2031,7 +2049,7 @@
 
           const containerTabela = document.querySelector('#aba-quadro .overflow-x-auto');
           if (containerTabela) {
-            containerTabela.style.maxHeight = 'calc(100vh - 210px)';
+            containerTabela.style.maxHeight = '100vh';
             containerTabela.style.overflowY = 'auto';
             clearInterval(intervaloTvScroll);
             intervaloTvScroll = setInterval(() => {
