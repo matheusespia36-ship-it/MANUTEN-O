@@ -115,15 +115,15 @@ def _inferir_categoria(frota, cat_planilha=""):
 
 def _baixar_conteudo_drive(file_id):
     url = f"https://drive.google.com/uc?export=download&confirm=t&id={file_id}"
-    session = requests.Session()
-    resposta = session.get(url, timeout=30)
+    req_session = requests.Session()
+    resposta = req_session.get(url, timeout=30)
     if resposta.status_code in (403, 404):
         raise RuntimeError(f"O Drive respondeu HTTP {resposta.status_code}. Confira o compartilhamento.")
     resposta.raise_for_status()
 
     for k, v in resposta.cookies.items():
         if k.startswith("download_warning"):
-            resposta = session.get(url, params={"confirm": v}, timeout=30)
+            resposta = req_session.get(url, params={"confirm": v}, timeout=30)
             resposta.raise_for_status()
             break
 
@@ -131,7 +131,7 @@ def _baixar_conteudo_drive(file_id):
         if b"confirm=" in resposta.content:
             m = re.search(r'confirm=([A-Za-z0-9_-]+)', resposta.text)
             if m:
-                resposta = session.get(url, params={"confirm": m.group(1)}, timeout=30)
+                resposta = req_session.get(url, params={"confirm": m.group(1)}, timeout=30)
                 resposta.raise_for_status()
 
     if not resposta.content.startswith(b"PK"):
@@ -230,7 +230,6 @@ def _processar_workbook(wb):
             if item["fim"] == "":
                 em_manutencao.append(item)
             else:
-                # Agrupa no histórico por equipamento
                 if equip_str not in historico_por_frota:
                     historico_por_frota[equip_str] = []
                 historico_por_frota[equip_str].append({
@@ -297,7 +296,7 @@ def _obter_dados_planilha(forcar=False):
 
 
 # =============================================================================
-# USUÁRIOS E ACESSOS
+# USUÁRIOS E ACESSOS (COM PERSISTÊNCIA REMOTA NO APPS SCRIPT / GOOGLE DRIVE)
 # =============================================================================
 PERFIS = {
     "ENCARREGADO": ["quadro", "os"],
@@ -306,11 +305,11 @@ PERFIS = {
     "ADMINISTRADOR": ["quadro", "os", "minhas-os", "pendencias", "acessos"],
 }
 LOGIN_RE = re.compile(r"^[a-z0-9._-]{3,30}$")
-SENHA_MIN = 3  # senha inicial do admin é "123"; o admin pode exigir mais ao criar usuários
+SENHA_MIN = 3
 
 _users_lock = threading.RLock()
 _users_cache = {"carregado": False, "usuarios": {}}
-_tentativas = {}  # chave -> (falhas, bloqueado_ate)
+_tentativas = {}
 
 
 def _agora_iso():
@@ -325,7 +324,7 @@ def _admin_padrao():
         "perfil": "ADMINISTRADOR",
         "senha_hash": generate_password_hash("123"),
         "ativo": True,
-        "trocar_senha": True,  # senha inicial: avisa para trocar
+        "trocar_senha": True,
         "criado_em": _agora_iso(),
         "ultimo_acesso": "",
     }
@@ -342,34 +341,42 @@ def _ler_arquivo_usuarios():
 
 def _apps_script_usuarios(acao, payload=None):
     if not APPS_SCRIPT_URL:
+        print("[USUÁRIOS] APPS_SCRIPT_URL não configurada no ambiente!")
         return None
     corpo = {"tipo": acao, "token": USERS_SYNC_TOKEN}
     if payload is not None:
         corpo["usuarios"] = payload
     try:
         res = requests.post(APPS_SCRIPT_URL, json=corpo, timeout=25)
+        res.raise_for_status()
         data = res.json()
         if data.get("status") == "sucesso":
             return data
+        print(f"[USUÁRIOS] Apps Script recusou ({acao}): {data}")
     except Exception as e:
-        print(f"Aviso: sincronização de usuários com Apps Script falhou: {e}")
+        print(f"[USUÁRIOS] Erro ao conectar no Apps Script ({acao}): {e}")
     return None
 
 
 def _carregar_usuarios():
-    """Lê usuários do Apps Script (persistente no Render grátis) ou do arquivo local."""
+    """Lê usuários do Apps Script (persistente no Render) ou do arquivo local."""
     with _users_lock:
         if _users_cache["carregado"]:
             return _users_cache["usuarios"]
+
         usuarios = None
         remoto = _apps_script_usuarios("usuarios_carregar")
-        if remoto and isinstance(remoto.get("usuarios"), dict) and remoto["usuarios"]:
+        if remoto and isinstance(remoto.get("usuarios"), dict) and len(remoto["usuarios"]) > 0:
             usuarios = remoto["usuarios"]
+            _persistir_usuarios(usuarios, remoto=False)
+
         if not usuarios:
             usuarios = _ler_arquivo_usuarios()
+
         if not usuarios:
             usuarios = {"admin": _admin_padrao()}
-            _persistir_usuarios(usuarios)
+            _persistir_usuarios(usuarios, remoto=True)
+
         _users_cache["usuarios"] = usuarios
         _users_cache["carregado"] = True
         return usuarios
@@ -384,7 +391,9 @@ def _persistir_usuarios(usuarios, remoto=True):
     except OSError as e:
         print(f"Aviso: não foi possível gravar {USERS_FILE}: {e}")
     if remoto:
-        _apps_script_usuarios("usuarios_salvar", usuarios)
+        res = _apps_script_usuarios("usuarios_salvar", usuarios)
+        if not res:
+            print("[CRÍTICO] Usuários salvos apenas localmente! Ao reiniciar o servidor serão perdidos.")
 
 
 def _usuario_publico(u):
@@ -459,7 +468,6 @@ def api_login():
 
     usuarios = _carregar_usuarios()
     u = usuarios.get(login)
-    # check_password_hash também roda quando o usuário não existe, para não revelar quem existe pelo tempo de resposta
     hash_ref = u["senha_hash"] if u else generate_password_hash("invalido")
     ok = check_password_hash(hash_ref, senha) and u is not None
     if not ok:
@@ -491,6 +499,18 @@ def api_me():
     if not u:
         return jsonify({"usuario": None})
     return jsonify({"usuario": _usuario_publico(u)})
+
+
+@app.route("/api/status-persistencia", methods=["GET"])
+@exigir_admin
+def api_status_persistencia():
+    teste = _apps_script_usuarios("usuarios_carregar")
+    return jsonify({
+        "apps_script_configurado": bool(APPS_SCRIPT_URL),
+        "token_configurado": bool(USERS_SYNC_TOKEN),
+        "conectado_drive": teste is not None,
+        "qtd_usuarios_remoto": len(teste.get("usuarios", {})) if teste else 0
+    })
 
 
 @app.route("/api/me/senha", methods=["POST"])
@@ -675,7 +695,7 @@ def obter_historico(frota):
         return jsonify({
             "frota": frota_limpa,
             "total": len(registros),
-            "registros": registros[:50]  # Retorna as últimas 50 manutenções reais dessa máquina
+            "registros": registros[:50]
         })
     except Exception as e:
         return jsonify({"erro": str(e), "frota": frota_limpa, "registros": []}), 500
